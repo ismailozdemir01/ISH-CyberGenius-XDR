@@ -23,59 +23,59 @@ The application does not generate fake Microsoft responses. Without Microsoft cr
 
 ## Run
 
-\`\`\`bash
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[test]'
 cp .env.example .env
 uvicorn app.main:app --reload
-\`\`\`
+```
 
 Configure:
 
-- \`TENANT_ID\`
-- \`CLIENT_ID\`
-- \`CLIENT_SECRET\`
-- \`GRAPH_BASE_URL\`
-- \`DEFENDER_API_BASE_URL\`
+- `TENANT_ID`
+- `CLIENT_ID`
+- `CLIENT_SECRET`
+- `GRAPH_BASE_URL`
+- `DEFENDER_API_BASE_URL`
 
-The Graph client uses the \`https://graph.microsoft.com/.default\` scope. Advanced Hunting requires the appropriate Microsoft Graph Security application permission; Microsoft documents \`ThreatHunting.Read.All\` as the least-privileged application permission for \`runHuntingQuery\`.
+The Graph client uses the `https://graph.microsoft.com/.default` scope. Advanced Hunting requires the appropriate Microsoft Graph Security application permission; Microsoft documents `ThreatHunting.Read.All` as the least-privileged application permission for `runHuntingQuery`.
 
-Incident write operations use Microsoft Graph Security \`SecurityIncident.ReadWrite.All\`.
+Incident write operations use Microsoft Graph Security `SecurityIncident.ReadWrite.All`.
 
-Defender for Endpoint response actions use the Defender API scope \`https://api.security.microsoft.com/.default\`. Machine isolation requires the \`Machine.Isolate\` application permission. These response endpoints perform real actions in the connected Defender tenant; they are not simulations.
+Defender for Endpoint response actions use the Defender API token audience `https://api.securitycenter.microsoft.com/.default`. Machine isolation requires the `Machine.Isolate` application permission. These response endpoints perform real actions in the connected Defender tenant; they are not simulations.
 
 ## API
 
 ### Incidents
 
-- \`GET /api/incidents?refresh=true\`
-- \`GET /api/incidents/{incident_id}\`
-- \`PATCH /api/incidents/{incident_id}\`
-- \`POST /api/incidents/{incident_id}/comments\`
-- \`POST /api/incidents/{incident_id}/evidence\`
-- \`GET /api/incidents/{incident_id}/report\`
+- `GET /api/incidents?refresh=true`
+- `GET /api/incidents/{incident_id}`
+- `PATCH /api/incidents/{incident_id}`
+- `POST /api/incidents/{incident_id}/comments`
+- `POST /api/incidents/{incident_id}/evidence`
+- `GET /api/incidents/{incident_id}/report`
 
 ### Hunting and telemetry
 
-- \`POST /api/hunting\` with \`{ "query": "DeviceProcessEvents | limit 10", "timespan": "P1D", "incident_id": "..." }\`
-- \`POST /api/telemetry\` with Defender-shaped event JSON
-- \`GET /api/telemetry?table=DeviceProcessEvents\`
-- \`GET /api/detections/rules\`
+- `POST /api/hunting` with `{ "query": "DeviceProcessEvents | limit 10", "timespan": "P1D", "incident_id": "..." }`
+- `POST /api/telemetry` with Defender-shaped event JSON
+- `GET /api/telemetry?table=DeviceProcessEvents`
+- `GET /api/detections/rules`
 
 ### Defender response
 
-- \`GET /api/machines\`
-- \`POST /api/response/isolate\`
-- \`POST /api/response/unisolate\`
-- \`GET /api/response/actions?incident_id=...\`
+- `GET /api/machines`
+- `POST /api/response/isolate`
+- `POST /api/response/unisolate`
+- `GET /api/response/actions?incident_id=...`
 
-Swagger UI: \`/docs\`
+Swagger UI: `/docs`
 
 ## Test
 
-\`\`\`bash
+```bash
 pytest -q
-\`\`\`
+```
 
 The CI workflow runs the test suite on Python 3.11, 3.12 and 3.13.
