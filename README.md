@@ -17,6 +17,7 @@ A single defensive XDR investigation workspace built around Microsoft Graph Secu
 - Persistent response-action audit trail.
 - Markdown incident report generation.
 - GitHub Actions CI for Python 3.11–3.13.
+- Connected browser dashboard served from the same FastAPI application.
 - One FastAPI application; components share the same API and SQLite database.
 
 The application does not generate fake Microsoft responses. Without Microsoft credentials it can still exercise the local telemetry/detection and persistence path. Microsoft-backed incident, hunting and response endpoints require configured credentials and the corresponding Entra permissions.
@@ -69,6 +70,8 @@ Defender for Endpoint response actions use the Defender API token audience `http
 - `POST /api/response/isolate`
 - `POST /api/response/unisolate`
 - `GET /api/response/actions?incident_id=...`
+
+Browser dashboard: `/`
 
 Swagger UI: `/docs`
 
