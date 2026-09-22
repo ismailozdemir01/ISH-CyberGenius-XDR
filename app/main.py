@@ -1,6 +1,8 @@
+from pathlib import Path
 from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from .config import settings
 from .db import Database
@@ -236,3 +238,5 @@ def detection_rules():
 @app.get("/api/response/actions")
 def response_actions(incident_id: str | None = None, limit: int = 100):
     return {"value":db.response_actions(incident_id, min(max(limit,1),500))}
+
+app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="ui")
