@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "ISH-CyberGenius-XDR"
     database_path: str = "./data/xdr.db"
     graph_base_url: str = "https://graph.microsoft.com/v1.0"
+    defender_api_base_url: str = "https://api.security.microsoft.com"
     tenant_id: str | None = None
     client_id: str | None = None
     client_secret: str | None = None
