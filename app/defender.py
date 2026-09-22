@@ -50,7 +50,7 @@ class DefenderClient:
 
     async def _defender(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         return await self._request(
-            method, path, "https://api.security.microsoft.com/.default", self.defender_api_base_url, **kwargs
+            method, path, "https://api.securitycenter.microsoft.com/.default", self.defender_api_base_url, **kwargs
         )
 
     async def incidents(self, top: int = 100) -> dict[str, Any]:
