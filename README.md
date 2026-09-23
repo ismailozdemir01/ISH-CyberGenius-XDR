@@ -9,18 +9,21 @@ A single defensive XDR investigation workspace built around Microsoft Graph Secu
 - Incident comments through Graph.
 - Microsoft Graph Advanced Hunting with real KQL.
 - Investigation history linked to incidents.
-- Evidence store for hunting results and response results.
+- Evidence store for hunting results, correlations and response results.
 - Local ingestion for Defender Advanced Hunting-shaped JSON records.
 - Connected detections for DeviceProcessEvents and DeviceNetworkEvents.
+- Behavioral correlation across process and network telemetry.
+- ATT&CK technique mapping for correlated behaviors (`T1059.001`, `T1021.001`).
+- Persistent correlation findings and incident-linked attack timeline.
 - Microsoft Defender for Endpoint machine inventory.
 - Real machine isolation and release-from-isolation response actions.
 - Persistent response-action audit trail.
-- Markdown incident report generation.
+- Markdown incident report generation including correlation findings.
 - GitHub Actions CI for Python 3.11–3.13.
 - Connected browser dashboard served from the same FastAPI application.
 - One FastAPI application; components share the same API and SQLite database.
 
-The application does not generate fake Microsoft responses. Without Microsoft credentials it can still exercise the local telemetry/detection and persistence path. Microsoft-backed incident, hunting and response endpoints require configured credentials and the corresponding Entra permissions.
+The application does not generate fake Microsoft responses. Without Microsoft credentials it can still exercise the local telemetry, detection, correlation and persistence path. Microsoft-backed incident, hunting and response endpoints require configured credentials and the corresponding Entra permissions.
 
 ## Run
 
@@ -57,12 +60,17 @@ Defender for Endpoint response actions use the Defender API token audience `http
 - `POST /api/incidents/{incident_id}/evidence`
 - `GET /api/incidents/{incident_id}/report`
 
-### Hunting and telemetry
+### Hunting, detection and correlation
 
 - `POST /api/hunting` with `{ "query": "DeviceProcessEvents | limit 10", "timespan": "P1D", "incident_id": "..." }`
 - `POST /api/telemetry` with Defender-shaped event JSON
 - `GET /api/telemetry?table=DeviceProcessEvents`
 - `GET /api/detections/rules`
+- `POST /api/correlate` to correlate local telemetry and optionally attach findings to an incident
+- `GET /api/correlations?incident_id=...`
+- `GET /api/timeline/{incident_id}`
+
+The correlation layer currently joins encoded PowerShell and RDP/process activity by device and time window. It is intentionally evidence-driven: a correlation is persisted only from telemetry already present in the local store.
 
 ### Defender response
 
