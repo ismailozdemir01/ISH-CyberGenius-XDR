@@ -56,103 +56,74 @@ class MachineActionRequest(BaseModel):
 class IsolateRequest(MachineActionRequest): isolation_type:Literal["Full","Selective","UnManagedDevice"]="Full"
 
 @app.get("/health")
-def health():
-    return {"status":"ok","graph_configured":settings.graph_configured,"database":settings.database_path,"version":app.version}
-
+def health(): return {"status":"ok","graph_configured":settings.graph_configured,"database":settings.database_path,"version":app.version}
 @app.get("/ready")
 def ready():
-    try:
-        db.telemetry(limit=1)
-        return {"status":"ready","graph_configured":settings.graph_configured}
-    except Exception as exc:
-        raise HTTPException(503,f"Database unavailable: {exc}") from exc
-
+    try: db.telemetry(limit=1); return {"status":"ready","graph_configured":settings.graph_configured}
+    except Exception as exc: raise HTTPException(503,f"Database unavailable: {exc}") from exc
 @app.get("/api/overview")
 def overview(limit:int=5000):
-    rows=db.telemetry(limit=min(max(limit,1),5000))
-    correlations=db.correlations(limit=500)
+    rows=db.telemetry(limit=min(max(limit,1),5000)); correlations=db.correlations(limit=500)
     return summarize(rows,correlations)
-
 @app.get("/api/incidents")
 async def list_incidents(limit:int=100,refresh:bool=True):
     limit=min(max(limit,1),100)
-    if refresh and settings.graph_configured:
-        data=await defender().incidents(limit); db.upsert_incidents(data.get("value",[]))
+    if refresh and settings.graph_configured: data=await defender().incidents(limit); db.upsert_incidents(data.get("value",[]))
     return {"value":db.list_incidents(limit)}
-
 @app.get("/api/incidents/{incident_id}")
 async def get_incident(incident_id:str,refresh:bool=True):
-    if refresh and settings.graph_configured:
-        data=await defender().incident(incident_id); db.upsert_incidents([data])
+    if refresh and settings.graph_configured: data=await defender().incident(incident_id); db.upsert_incidents([data])
     incident=db.incident(incident_id)
     if not incident: raise HTTPException(404,"Incident not found")
-    correlations=db.correlations(incident_id)
-    evidence=db.evidence(incident_id)
-    actions=db.response_actions(incident_id)
+    correlations=db.correlations(incident_id); evidence=db.evidence(incident_id); actions=db.response_actions(incident_id)
     return {"incident":incident,"risk":calculate_risk(incident,correlations,evidence,actions),"investigations":db.investigations(incident_id),"evidence":evidence,"response_actions":actions,"correlations":correlations}
-
 @app.get("/api/incidents/{incident_id}/graph")
 def incident_graph(incident_id:str,limit:int=5000):
     if not db.incident(incident_id): raise HTTPException(404,"Incident not found")
-    correlations=db.correlations(incident_id)
-    rows=db.telemetry(limit=min(max(limit,1),5000))
-    return build_entity_graph(rows,correlations)
-
+    return build_entity_graph(db.telemetry(limit=min(max(limit,1),5000)),db.correlations(incident_id))
 @app.get("/api/incidents/{incident_id}/risk")
 def incident_risk(incident_id:str):
     incident=db.incident(incident_id)
     if not incident: raise HTTPException(404,"Incident not found")
     return calculate_risk(incident,db.correlations(incident_id),db.evidence(incident_id),db.response_actions(incident_id))
-
 @app.patch("/api/incidents/{incident_id}")
 async def update_incident(incident_id:str,req:IncidentUpdateRequest):
-    mapping={"assigned_to":"assignedTo","classification":"classification","determination":"determination","custom_tags":"customTags","description":"description","display_name":"displayName","severity":"severity","status":"status","resolving_comment":"resolvingComment","summary":"summary"}
-    changes={mapping[k]:v for k,v in req.model_dump(exclude_none=True).items()}
+    mapping={"assigned_to":"assignedTo","classification":"classification","determination":"determination","custom_tags":"customTags","description":"description","display_name":"displayName","severity":"severity","status":"status","resolving_comment":"resolvingComment","summary":"summary"}; changes={mapping[k]:v for k,v in req.model_dump(exclude_none=True).items()}
     if not changes: raise HTTPException(400,"At least one incident property is required")
     data=await defender().update_incident(incident_id,changes); db.upsert_incidents([data]); return data
-
 @app.post("/api/incidents/{incident_id}/comments")
 async def comment_incident(incident_id:str,req:IncidentCommentRequest): return await defender().incident_comment(incident_id,req.comment)
-
 @app.get("/api/incidents/{incident_id}/report",response_class=PlainTextResponse)
 def incident_report(incident_id:str):
     incident=db.incident(incident_id)
     if not incident: raise HTTPException(404,"Incident not found")
     return build_incident_report(incident,db.investigations(incident_id),db.evidence(incident_id),db.response_actions(incident_id),db.correlations(incident_id))
-
 @app.post("/api/incidents/{incident_id}/evidence")
 def add_evidence(incident_id:str,req:EvidenceRequest):
     if not db.incident(incident_id): raise HTTPException(404,"Incident not found in local cache")
     return {"id":db.add_evidence(incident_id,req.source_type,req.title,req.data,req.source_id),"incident_id":incident_id}
-
 @app.post("/api/hunting")
 async def hunting(req:HuntingRequest):
     data=await defender().hunting_query(req.query,req.timespan); investigation_id=db.save_investigation(req.incident_id,req.query,data)
     if req.incident_id: db.add_evidence(req.incident_id,"advanced_hunting","Advanced Hunting query result",{"query":req.query,"timespan":req.timespan,"result":data},str(investigation_id))
     return {"investigation_id":investigation_id,"result":data}
-
 @app.post("/api/correlate")
 def run_correlation(req:CorrelationRequest):
     findings=correlate(db.telemetry(limit=req.telemetry_limit),req.window_minutes,req.device_name); saved=db.save_correlations(req.incident_id,findings)
     if req.incident_id:
         for finding in findings: db.add_evidence(req.incident_id,"behavioral_correlation",finding["title"],finding)
     return {"saved":saved,"findings":findings}
-
 @app.get("/api/correlations")
 def list_correlations(incident_id:str|None=None,device_name:str|None=None,limit:int=100): return {"value":db.correlations(incident_id,device_name,min(max(limit,1),500))}
-
 @app.get("/api/timeline/{incident_id}")
 def incident_timeline(incident_id:str,limit:int=500):
     if not db.incident(incident_id): raise HTTPException(404,"Incident not found")
     timeline=[]
     for item in db.correlations(incident_id,limit=min(max(limit,1),500)): timeline.append({"type":"correlation","timestamp":item.get("first_timestamp") or item.get("created_at"),"title":item["title"],"severity":item["severity"],"score":item["score"],"techniques":item["techniques"],"data":item})
     for item in db.evidence(incident_id,limit=min(max(limit,1),500)): timeline.append({"type":"evidence","timestamp":item.get("created_at"),"title":item["title"],"severity":None,"score":None,"techniques":[],"data":item})
-    timeline.sort(key=lambda x:x.get("timestamp") or "",reverse=True)
-    return {"incident_id":incident_id,"value":timeline[:limit]}
-
+    timeline.sort(key=lambda x:x.get("timestamp") or "",reverse=True); return {"incident_id":incident_id,"value":timeline[:limit]}
 @app.get("/api/machines")
 async def machines(limit:int=100): return await defender().machines(min(max(limit,1),10000))
-
 @app.post("/api/response/isolate")
 async def isolate(req:IsolateRequest):
     try: result=await defender().isolate_machine(req.machine_id,req.comment,req.isolation_type)
@@ -160,24 +131,18 @@ async def isolate(req:IsolateRequest):
     action_id=db.save_response_action(req.incident_id,req.machine_id,"Isolate",result.get("status"),req.model_dump(),result)
     if req.incident_id: db.add_evidence(req.incident_id,"defender_response","Machine isolation action",result,str(action_id))
     return {"action_id":action_id,"result":result}
-
 @app.post("/api/response/unisolate")
 async def unisolate(req:MachineActionRequest):
     result=await defender().unisolate_machine(req.machine_id,req.comment); action_id=db.save_response_action(req.incident_id,req.machine_id,"Unisolate",result.get("status"),req.model_dump(),result)
     if req.incident_id: db.add_evidence(req.incident_id,"defender_response","Machine release from isolation action",result,str(action_id))
     return {"action_id":action_id,"result":result}
-
 @app.post("/api/telemetry")
 def ingest(req:IngestRequest):
-    count=db.ingest_events(req.table,req.events)
-    findings=detect(req.events,req.table)
-    return {"ingested":count,"detections":findings}
-
+    count=db.ingest_events(req.table,req.events); return {"ingested":count,"detections":detect(req.events,req.table)}
 @app.get("/api/telemetry")
 def telemetry(table:str|None=None,limit:int=500): return {"value":db.telemetry(table,min(max(limit,1),5000))}
 @app.get("/api/detections/rules")
 def detection_rules(): return {"value":[{k:v for k,v in r.items() if k!="match"} for r in RULES]}
 @app.get("/api/response/actions")
 def response_actions(incident_id:str|None=None,limit:int=100): return {"value":db.response_actions(incident_id,min(max(limit,1),500))}
-
 app.mount("/",StaticFiles(directory=Path(__file__).parent/"static",html=True),name="ui")
