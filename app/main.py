@@ -1,9 +1,11 @@
 from pathlib import Path
 from typing import Any, Literal
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.gzip import GZipMiddleware
+from .analytics import build_entity_graph, calculate_risk, summarize
 from .config import settings
 from .db import Database
 from .defender import DefenderClient
@@ -11,12 +13,24 @@ from .detection import detect, RULES
 from .correlation import correlate
 from .report import build_incident_report
 
-app=FastAPI(title=settings.app_name, version="0.3.0")
+app=FastAPI(title=settings.app_name, version="1.0.0")
 db=Database(settings.database_path)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response=await call_next(request)
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
+    response.headers["Cache-Control"]="no-store" if request.url.path.startswith("/api/") else "no-cache"
+    return response
 
 def defender() -> DefenderClient:
-    if not settings.graph_configured: raise HTTPException(503, "Microsoft credentials are not configured. Set TENANT_ID, CLIENT_ID and CLIENT_SECRET.")
-    return DefenderClient(settings.tenant_id, settings.client_id, settings.client_secret, settings.graph_base_url, settings.request_timeout, settings.defender_api_base_url)
+    if not settings.graph_configured:
+        raise HTTPException(503,"Microsoft credentials are not configured. Set TENANT_ID, CLIENT_ID and CLIENT_SECRET.")
+    return DefenderClient(settings.tenant_id,settings.client_id,settings.client_secret,settings.graph_base_url,settings.request_timeout,settings.defender_api_base_url)
 
 class HuntingRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
@@ -43,6 +57,14 @@ class IsolateRequest(MachineActionRequest): isolation_type:Literal["Full","Selec
 
 @app.get("/health")
 def health(): return {"status":"ok","graph_configured":settings.graph_configured,"database":settings.database_path,"version":app.version}
+@app.get("/ready")
+def ready():
+    try: db.telemetry(limit=1); return {"status":"ready","graph_configured":settings.graph_configured}
+    except Exception as exc: raise HTTPException(503,f"Database unavailable: {exc}") from exc
+@app.get("/api/overview")
+def overview(limit:int=5000):
+    rows=db.telemetry(limit=min(max(limit,1),5000)); correlations=db.correlations(limit=500)
+    return summarize(rows,correlations)
 @app.get("/api/incidents")
 async def list_incidents(limit:int=100,refresh:bool=True):
     limit=min(max(limit,1),100)
@@ -53,7 +75,17 @@ async def get_incident(incident_id:str,refresh:bool=True):
     if refresh and settings.graph_configured: data=await defender().incident(incident_id); db.upsert_incidents([data])
     incident=db.incident(incident_id)
     if not incident: raise HTTPException(404,"Incident not found")
-    return {"incident":incident,"investigations":db.investigations(incident_id),"evidence":db.evidence(incident_id),"response_actions":db.response_actions(incident_id),"correlations":db.correlations(incident_id)}
+    correlations=db.correlations(incident_id); evidence=db.evidence(incident_id); actions=db.response_actions(incident_id)
+    return {"incident":incident,"risk":calculate_risk(incident,correlations,evidence,actions),"investigations":db.investigations(incident_id),"evidence":evidence,"response_actions":actions,"correlations":correlations}
+@app.get("/api/incidents/{incident_id}/graph")
+def incident_graph(incident_id:str,limit:int=5000):
+    if not db.incident(incident_id): raise HTTPException(404,"Incident not found")
+    return build_entity_graph(db.telemetry(limit=min(max(limit,1),5000)),db.correlations(incident_id))
+@app.get("/api/incidents/{incident_id}/risk")
+def incident_risk(incident_id:str):
+    incident=db.incident(incident_id)
+    if not incident: raise HTTPException(404,"Incident not found")
+    return calculate_risk(incident,db.correlations(incident_id),db.evidence(incident_id),db.response_actions(incident_id))
 @app.patch("/api/incidents/{incident_id}")
 async def update_incident(incident_id:str,req:IncidentUpdateRequest):
     mapping={"assigned_to":"assignedTo","classification":"classification","determination":"determination","custom_tags":"customTags","description":"description","display_name":"displayName","severity":"severity","status":"status","resolving_comment":"resolvingComment","summary":"summary"}; changes={mapping[k]:v for k,v in req.model_dump(exclude_none=True).items()}
@@ -85,12 +117,13 @@ def run_correlation(req:CorrelationRequest):
 def list_correlations(incident_id:str|None=None,device_name:str|None=None,limit:int=100): return {"value":db.correlations(incident_id,device_name,min(max(limit,1),500))}
 @app.get("/api/timeline/{incident_id}")
 def incident_timeline(incident_id:str,limit:int=500):
+    if not db.incident(incident_id): raise HTTPException(404,"Incident not found")
     timeline=[]
     for item in db.correlations(incident_id,limit=min(max(limit,1),500)): timeline.append({"type":"correlation","timestamp":item.get("first_timestamp") or item.get("created_at"),"title":item["title"],"severity":item["severity"],"score":item["score"],"techniques":item["techniques"],"data":item})
     for item in db.evidence(incident_id,limit=min(max(limit,1),500)): timeline.append({"type":"evidence","timestamp":item.get("created_at"),"title":item["title"],"severity":None,"score":None,"techniques":[],"data":item})
     timeline.sort(key=lambda x:x.get("timestamp") or "",reverse=True); return {"incident_id":incident_id,"value":timeline[:limit]}
 @app.get("/api/machines")
-async def machines(limit:int=100): return await defender().machines(limit)
+async def machines(limit:int=100): return await defender().machines(min(max(limit,1),10000))
 @app.post("/api/response/isolate")
 async def isolate(req:IsolateRequest):
     try: result=await defender().isolate_machine(req.machine_id,req.comment,req.isolation_type)

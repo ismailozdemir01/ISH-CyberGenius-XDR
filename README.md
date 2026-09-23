@@ -2,28 +2,26 @@
 
 A single defensive XDR investigation workspace built around Microsoft Graph Security and Microsoft Defender for Endpoint APIs.
 
-## Implemented
+## Final stack
 
-- Microsoft Graph incident synchronization and incident detail retrieval.
-- Incident classification, determination, assignment, status and metadata updates through Graph.
-- Incident comments through Graph.
-- Microsoft Graph Advanced Hunting with real KQL.
-- Investigation history linked to incidents.
-- Evidence store for hunting results, correlations and response results.
-- Local ingestion for Defender Advanced Hunting-shaped JSON records.
-- Connected detections for DeviceProcessEvents and DeviceNetworkEvents.
-- Behavioral correlation across process and network telemetry.
-- ATT&CK technique mapping for correlated behaviors (`T1059.001`, `T1021.001`).
-- Persistent correlation findings and incident-linked attack timeline.
-- Microsoft Defender for Endpoint machine inventory.
-- Real machine isolation and release-from-isolation response actions.
-- Persistent response-action audit trail.
-- Markdown incident report generation including correlation findings.
+- Microsoft Graph incident synchronization, retrieval, updates and comments.
+- Real Microsoft Graph Advanced Hunting with persisted investigation history.
+- Evidence store spanning hunting, behavioral correlation and response actions.
+- Defender-shaped telemetry ingestion and connected local detection rules.
+- Behavioral correlation across process/network activity with ATT&CK technique mapping.
+- Incident risk scoring with explainable factors.
+- Entity graph for devices, users, processes, IPs, domains, hashes and ATT&CK techniques.
+- Persistent attack timeline and incident-linked correlation findings.
+- Defender for Endpoint machine inventory and real isolate/unisolate response actions.
+- Persistent response audit trail.
+- Markdown incident reports.
+- Browser dashboard using the same live API.
+- GZip compression and baseline security response headers.
+- `/health` and `/ready` operational probes.
+- Workspace telemetry/correlation overview endpoint.
 - GitHub Actions CI for Python 3.11–3.13.
-- Connected browser dashboard served from the same FastAPI application.
-- One FastAPI application; components share the same API and SQLite database.
 
-The application does not generate fake Microsoft responses. Without Microsoft credentials it can still exercise the local telemetry, detection, correlation and persistence path. Microsoft-backed incident, hunting and response endpoints require configured credentials and the corresponding Entra permissions.
+The application does not fabricate Microsoft responses. Without Microsoft credentials, the local telemetry, detection, correlation, analytics and persistence paths remain usable. Microsoft-backed incident, hunting and response operations require the appropriate Entra application permissions and configured credentials.
 
 ## Run
 
@@ -42,46 +40,51 @@ Configure:
 - `CLIENT_SECRET`
 - `GRAPH_BASE_URL`
 - `DEFENDER_API_BASE_URL`
+- `DATABASE_PATH`
+- `REQUEST_TIMEOUT`
+
+## Operations
+
+- Browser dashboard: `/`
+- Swagger UI: `/docs`
+- Liveness: `GET /health`
+- Readiness: `GET /ready`
+- Workspace overview: `GET /api/overview`
+
+## Investigation API
+
+- `GET /api/incidents?refresh=true`
+- `GET /api/incidents/{incident_id}` — incident, risk, evidence, investigations, correlations and response history
+- `PATCH /api/incidents/{incident_id}`
+- `POST /api/incidents/{incident_id}/comments`
+- `POST /api/incidents/{incident_id}/evidence`
+- `GET /api/incidents/{incident_id}/risk`
+- `GET /api/incidents/{incident_id}/graph`
+- `GET /api/incidents/{incident_id}/report`
+- `POST /api/hunting`
+- `POST /api/telemetry`
+- `GET /api/telemetry`
+- `GET /api/detections/rules`
+- `POST /api/correlate`
+- `GET /api/correlations`
+- `GET /api/timeline/{incident_id}`
+
+The correlation layer is evidence-driven. It joins telemetry already present in the local store by device and time window; it does not invent Microsoft events.
+
+## Defender response
+
+- `GET /api/machines`
+- `POST /api/response/isolate`
+- `POST /api/response/unisolate`
+- `GET /api/response/actions`
+
+Isolation and unisolation call Microsoft Defender for Endpoint directly. The dashboard requires an explicit confirmation before these real containment operations.
 
 The Graph client uses the `https://graph.microsoft.com/.default` scope. Advanced Hunting requires the appropriate Microsoft Graph Security application permission; Microsoft documents `ThreatHunting.Read.All` as the least-privileged application permission for `runHuntingQuery`.
 
 Incident write operations use Microsoft Graph Security `SecurityIncident.ReadWrite.All`.
 
-Defender for Endpoint response actions use the Defender API token audience `https://api.securitycenter.microsoft.com/.default`. Machine isolation requires the `Machine.Isolate` application permission. These response endpoints perform real actions in the connected Defender tenant; they are not simulations.
-
-## API
-
-### Incidents
-
-- `GET /api/incidents?refresh=true`
-- `GET /api/incidents/{incident_id}`
-- `PATCH /api/incidents/{incident_id}`
-- `POST /api/incidents/{incident_id}/comments`
-- `POST /api/incidents/{incident_id}/evidence`
-- `GET /api/incidents/{incident_id}/report`
-
-### Hunting, detection and correlation
-
-- `POST /api/hunting` with `{ "query": "DeviceProcessEvents | limit 10", "timespan": "P1D", "incident_id": "..." }`
-- `POST /api/telemetry` with Defender-shaped event JSON
-- `GET /api/telemetry?table=DeviceProcessEvents`
-- `GET /api/detections/rules`
-- `POST /api/correlate` to correlate local telemetry and optionally attach findings to an incident
-- `GET /api/correlations?incident_id=...`
-- `GET /api/timeline/{incident_id}`
-
-The correlation layer currently joins encoded PowerShell and RDP/process activity by device and time window. It is intentionally evidence-driven: a correlation is persisted only from telemetry already present in the local store.
-
-### Defender response
-
-- `GET /api/machines`
-- `POST /api/response/isolate`
-- `POST /api/response/unisolate`
-- `GET /api/response/actions?incident_id=...`
-
-Browser dashboard: `/`
-
-Swagger UI: `/docs`
+Defender for Endpoint response actions use the documented Defender API token audience `https://api.securitycenter.microsoft.com/.default`. Machine isolation requires the `Machine.Isolate` application permission.
 
 ## Test
 
@@ -89,4 +92,4 @@ Swagger UI: `/docs`
 pytest -q
 ```
 
-The CI workflow runs the test suite on Python 3.11, 3.12 and 3.13.
+The CI workflow is the remaining automated verification gate and runs the test suite on Python 3.11, 3.12 and 3.13.
