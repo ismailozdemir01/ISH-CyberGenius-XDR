@@ -1,131 +1,45 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ISH CyberGenius XDR</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:0;background:#0b1220;color:#e5e7eb}
-header{padding:18px 24px;border-bottom:1px solid #243047}
-main{display:grid;grid-template-columns:340px 1fr;min-height:calc(100vh - 70px)}
-aside{border-right:1px solid #243047;padding:16px;overflow:auto}
-section{padding:20px;overflow:auto}
-button,input,textarea,select{font:inherit;border-radius:6px;border:1px solid #334155;padding:8px;background:#111827;color:#e5e7eb}
-button{cursor:pointer}
-button:hover{background:#1f2937}
-input,textarea,select{width:100%;box-sizing:border-box;margin:5px 0 10px}
-textarea{min-height:120px}
-.card{border:1px solid #243047;border-radius:8px;padding:12px;margin:8px 0;background:#0f172a}
-.card:hover{border-color:#64748b}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-pre{white-space:pre-wrap;overflow:auto;background:#020617;padding:12px;border-radius:8px}
-.small{color:#94a3b8;font-size:.9rem}
-.badge{display:inline-block;padding:2px 7px;border-radius:999px;background:#1e293b;margin-left:6px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+body{font-family:system-ui,sans-serif;margin:0;background:#0b1220;color:#e5e7eb}header{padding:18px 24px;border-bottom:1px solid #243047}main{display:grid;grid-template-columns:340px 1fr;min-height:calc(100vh - 70px)}aside{border-right:1px solid #243047;padding:16px;overflow:auto}section{padding:20px;overflow:auto}button,input,textarea,select{font:inherit;border-radius:6px;border:1px solid #334155;padding:8px;background:#111827;color:#e5e7eb}button{cursor:pointer}button:hover{background:#1f2937}input,textarea,select{width:100%;box-sizing:border-box;margin:5px 0 10px}textarea{min-height:120px}.card{border:1px solid #243047;border-radius:8px;padding:12px;margin:8px 0;background:#0f172a}.card:hover{border-color:#64748b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}pre{white-space:pre-wrap;overflow:auto;background:#020617;padding:12px;border-radius:8px}.small{color:#94a3b8;font-size:.9rem}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.critical{border-color:#7f1d1d}
 </style>
 </head>
 <body>
 <header><strong>ISH-CyberGenius-XDR</strong> <span id="health" class="small">loading...</span></header>
 <main>
-<aside>
-<div class="row"><button onclick="loadIncidents()">Refresh incidents</button><button onclick="loadMachines()">Machines</button></div>
-<div id="incidents"></div>
-</aside>
+<aside><div class="row"><button onclick="loadIncidents()">Refresh incidents</button><button onclick="loadMachines()">Machines</button></div><div id="incidents"></div></aside>
 <section>
 <div id="empty" class="small">Select an incident.</div>
 <div id="detail" hidden>
-<h2 id="title"></h2>
-<div id="meta" class="small"></div>
+<h2 id="title"></h2><div id="meta" class="small"></div>
 <div class="grid">
 <div class="card"><h3>Advanced Hunting</h3><textarea id="query">DeviceProcessEvents | limit 20</textarea><input id="timespan" value="P1D" placeholder="Timespan, e.g. P1D"><button onclick="hunt()">Run KQL</button><pre id="huntResult">No query run.</pre></div>
+<div class="card"><h3>Behavioral Correlation</h3><input id="deviceName" placeholder="Optional device name"><input id="windowMinutes" type="number" min="1" max="240" value="15"><button onclick="correlateNow()">Correlate telemetry</button><pre id="correlationResult">No correlation run.</pre></div>
 <div class="card"><h3>Incident update</h3><select id="status"><option value="active">active</option><option value="resolved">resolved</option><option value="redirected">redirected</option></select><input id="classification" placeholder="truePositive / falsePositive / ..."><input id="determination" placeholder="malware / phishing / ..."><button onclick="updateIncident()">Update</button></div>
 <div class="card"><h3>Response</h3><input id="machineId" placeholder="Defender machine ID"><input id="comment" value="Containment action from XDR workspace"><select id="isolationType"><option>Full</option><option>Selective</option><option>UnManagedDevice</option></select><div class="row"><button onclick="isolate()">Isolate</button><button onclick="unisolate()">Unisolate</button></div><pre id="responseResult">No response action run.</pre></div>
 </div>
+<h3>Correlation findings</h3><pre id="correlations">-</pre>
+<h3>Attack timeline</h3><pre id="timeline">-</pre>
 <h3>Evidence</h3><pre id="evidence">-</pre>
 <h3>Investigation history</h3><pre id="investigations">-</pre>
 <h3>Response history</h3><pre id="responses">-</pre>
 <p><a id="reportLink" target="_blank" rel="noreferrer">Open incident report</a></p>
-</div>
-</section>
-</main>
+</div></section></main>
 <script>
-let currentIncident=null;
-const $=id=>document.getElementById(id);
+let currentIncident=null;const $=id=>document.getElementById(id);
 async function api(path,options={}){const r=await fetch(path,{headers:{"Content-Type":"application/json"},...options});if(!r.ok)throw new Error(await r.text());return r.json();}
 async function loadHealth(){try{const h=await api("/health");$("health").textContent=h.graph_configured?"Microsoft APIs configured":"local mode";}catch(e){$("health").textContent=e.message;}}
-async function loadIncidents(){
- try{
-  const d=await api("/api/incidents?refresh=true");
-  $("incidents").replaceChildren(...d.value.map(x=>{
-   const b=document.createElement("button");b.className="card";b.style.width="100%";b.style.textAlign="left";
-   b.innerHTML="<strong></strong><div class='small'></div>";
-   b.querySelector("strong").textContent=x.name||x.id;
-   b.querySelector(".small").textContent=(x.severity||"unknown")+" · "+(x.status||"unknown");
-   b.onclick=()=>openIncident(x.id);return b;
-  }));
- }catch(e){$("incidents").textContent=e.message;}
-}
-async function openIncident(id){
- try{
-  const d=await api("/api/incidents/"+encodeURIComponent(id));
-  currentIncident=d.incident;
-  $("empty").hidden=true;$("detail").hidden=false;
-  $("title").textContent=d.incident.name||d.incident.id;
-  $("meta").textContent=[d.incident.id,d.incident.severity,d.incident.status,d.incident.classification,d.incident.determination].join(" · ");
-  $("status").value=d.incident.status||"active";
-  $("classification").value=d.incident.classification||"";
-  $("determination").value=d.incident.determination||"";
-  $("evidence").textContent=JSON.stringify(d.evidence,null,2);
-  $("investigations").textContent=JSON.stringify(d.investigations,null,2);
-  $("responses").textContent=JSON.stringify(d.response_actions,null,2);
-  $("reportLink").href="/api/incidents/"+encodeURIComponent(id)+"/report";
- }catch(e){alert(e.message);}
-}
-async function hunt(){
- if(!currentIncident)return;
- try{
-  const d=await api("/api/hunting",{method:"POST",body:JSON.stringify({query:$("query").value,timespan:$("timespan").value,incident_id:currentIncident.id})});
-  $("huntResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);
- }catch(e){$("huntResult").textContent=e.message;}
-}
-async function updateIncident(){
- if(!currentIncident)return;
- try{
-  await api("/api/incidents/"+encodeURIComponent(currentIncident.id),{method:"PATCH",body:JSON.stringify({status:$("status").value,classification:$("classification").value||undefined,determination:$("determination").value||undefined})});
-  await openIncident(currentIncident.id);await loadIncidents();
- }catch(e){alert(e.message);}
-}
-async function isolate(){
- if(!currentIncident)return;
- if(!$("machineId").value)return alert("Enter a Defender machine ID.");
- if(!confirm("This sends a real isolation action to Microsoft Defender for Endpoint. Continue?"))return;
- try{
-  const d=await api("/api/response/isolate",{method:"POST",body:JSON.stringify({incident_id:currentIncident.id,machine_id:$("machineId").value,comment:$("comment").value,isolation_type:$("isolationType").value})});
-  $("responseResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);
- }catch(e){$("responseResult").textContent=e.message;}
-}
-async function unisolate(){
- if(!currentIncident)return;
- if(!$("machineId").value)return alert("Enter a Defender machine ID.");
- if(!confirm("This sends a real release-from-isolation action to Microsoft Defender for Endpoint. Continue?"))return;
- try{
-  const d=await api("/api/response/unisolate",{method:"POST",body:JSON.stringify({incident_id:currentIncident.id,machine_id:$("machineId").value,comment:$("comment").value})});
-  $("responseResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);
- }catch(e){$("responseResult").textContent=e.message;}
-}
-async function loadMachines(){
- try{
-  const d=await api("/api/machines?limit=100");
-  $("incidents").replaceChildren(...(d.value||[]).map(x=>{
-   const div=document.createElement("div");div.className="card";
-   div.innerHTML="<strong></strong><div class='small'></div>";
-   div.querySelector("strong").textContent=x.computerDnsName||x.id;
-   div.querySelector(".small").textContent=[x.id,x.healthStatus,x.riskScore].filter(Boolean).join(" · ");
-   return div;
-  }));
- }catch(e){$("incidents").textContent=e.message;}
-}
+async function loadIncidents(){try{const d=await api("/api/incidents?refresh=true");$("incidents").replaceChildren(...d.value.map(x=>{const b=document.createElement("button");b.className="card";b.style.width="100%";b.style.textAlign="left";b.innerHTML="<strong></strong><div class='small'></div>";b.querySelector("strong").textContent=x.name||x.id;b.querySelector(".small").textContent=(x.severity||"unknown")+" · "+(x.status||"unknown");b.onclick=()=>openIncident(x.id);return b;}));}catch(e){$("incidents").textContent=e.message;}}
+async function openIncident(id){try{const d=await api("/api/incidents/"+encodeURIComponent(id));currentIncident=d.incident;$("empty").hidden=true;$("detail").hidden=false;$("title").textContent=d.incident.name||d.incident.id;$("meta").textContent=[d.incident.id,d.incident.severity,d.incident.status,d.incident.classification,d.incident.determination].join(" · ");$("status").value=d.incident.status||"active";$("classification").value=d.incident.classification||"";$("determination").value=d.incident.determination||"";$("correlations").textContent=JSON.stringify(d.correlations||[],null,2);$("evidence").textContent=JSON.stringify(d.evidence,null,2);$("investigations").textContent=JSON.stringify(d.investigations,null,2);$("responses").textContent=JSON.stringify(d.response_actions,null,2);await loadTimeline();$("reportLink").href="/api/incidents/"+encodeURIComponent(id)+"/report";}catch(e){alert(e.message);}}
+async function loadTimeline(){if(!currentIncident)return;try{const d=await api("/api/timeline/"+encodeURIComponent(currentIncident.id));$("timeline").textContent=JSON.stringify(d.value,null,2);}catch(e){$("timeline").textContent=e.message;}}
+async function hunt(){if(!currentIncident)return;try{const d=await api("/api/hunting",{method:"POST",body:JSON.stringify({query:$("query").value,timespan:$("timespan").value,incident_id:currentIncident.id})});$("huntResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);}catch(e){$("huntResult").textContent=e.message;}}
+async function correlateNow(){if(!currentIncident)return;try{const d=await api("/api/correlate",{method:"POST",body:JSON.stringify({incident_id:currentIncident.id,device_name:$("deviceName").value||null,window_minutes:Number($("windowMinutes").value),telemetry_limit:5000})});$("correlationResult").textContent=JSON.stringify(d.findings,null,2);await openIncident(currentIncident.id);}catch(e){$("correlationResult").textContent=e.message;}}
+async function updateIncident(){if(!currentIncident)return;try{await api("/api/incidents/"+encodeURIComponent(currentIncident.id),{method:"PATCH",body:JSON.stringify({status:$("status").value,classification:$("classification").value||undefined,determination:$("determination").value||undefined})});await openIncident(currentIncident.id);await loadIncidents();}catch(e){alert(e.message);}}
+async function isolate(){if(!currentIncident)return;if(!$("machineId").value)return alert("Enter a Defender machine ID.");if(!confirm("This sends a real isolation action to Microsoft Defender for Endpoint. Continue?"))return;try{const d=await api("/api/response/isolate",{method:"POST",body:JSON.stringify({incident_id:currentIncident.id,machine_id:$("machineId").value,comment:$("comment").value,isolation_type:$("isolationType").value})});$("responseResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);}catch(e){$("responseResult").textContent=e.message;}}
+async function unisolate(){if(!currentIncident)return;if(!$("machineId").value)return alert("Enter a Defender machine ID.");if(!confirm("This sends a real release-from-isolation action to Microsoft Defender for Endpoint. Continue?"))return;try{const d=await api("/api/response/unisolate",{method:"POST",body:JSON.stringify({incident_id:currentIncident.id,machine_id:$("machineId").value,comment:$("comment").value})});$("responseResult").textContent=JSON.stringify(d.result,null,2);await openIncident(currentIncident.id);}catch(e){$("responseResult").textContent=e.message;}}
+async function loadMachines(){try{const d=await api("/api/machines?limit=100");$("incidents").replaceChildren(...(d.value||[]).map(x=>{const div=document.createElement("div");div.className="card";div.innerHTML="<strong></strong><div class='small'></div>";div.querySelector("strong").textContent=x.computerDnsName||x.id;div.querySelector(".small").textContent=[x.id,x.healthStatus,x.riskScore].filter(Boolean).join(" · ");return div;}));}catch(e){$("incidents").textContent=e.message;}}
 loadHealth();loadIncidents();
-</script>
-</body>
-</html>
+</script></body></html>
