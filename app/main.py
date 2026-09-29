@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any, Literal
+from secrets import compare_digest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,12 +14,18 @@ from .detection import detect, RULES
 from .correlation import correlate
 from .report import build_incident_report
 
-app=FastAPI(title=settings.app_name, version="1.0.0")
+app=FastAPI(title=settings.app_name, version="1.1.0")
 db=Database(settings.database_path)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    if request.url.path.startswith("/api/"):
+        if not settings.api_key:
+            return PlainTextResponse("API authentication is not configured.", status_code=503)
+        auth=request.headers.get("Authorization","")
+        if not auth.startswith("Bearer ") or not compare_digest(auth[7:], settings.api_key):
+            return PlainTextResponse("Unauthorized", status_code=401, headers={"WWW-Authenticate":"Bearer"})
     response=await call_next(request)
     response.headers["X-Content-Type-Options"]="nosniff"
     response.headers["X-Frame-Options"]="DENY"
@@ -53,13 +60,14 @@ class EvidenceRequest(BaseModel):
 class MachineActionRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
     incident_id:str|None=Field(default=None,max_length=200); machine_id:str=Field(min_length=1,max_length=200); comment:str=Field(min_length=1,max_length=2000)
-class IsolateRequest(MachineActionRequest): isolation_type:Literal["Full","Selective","UnManagedDevice"]="Full"
+class IsolateRequest(MachineActionRequest):
+    isolation_type:Literal["Full","Selective","UnManagedDevice"]="Full"
 
 @app.get("/health")
-def health(): return {"status":"ok","graph_configured":settings.graph_configured,"database":settings.database_path,"version":app.version}
+def health(): return {"status":"ok","graph_configured":settings.graph_configured,"api_auth_configured":bool(settings.api_key),"database":settings.database_path,"version":app.version}
 @app.get("/ready")
 def ready():
-    try: db.telemetry(limit=1); return {"status":"ready","graph_configured":settings.graph_configured}
+    try: db.telemetry(limit=1); return {"status":"ready","graph_configured":settings.graph_configured,"api_auth_configured":bool(settings.api_key)}
     except Exception as exc: raise HTTPException(503,f"Database unavailable: {exc}") from exc
 @app.get("/api/overview")
 def overview(limit:int=5000):
