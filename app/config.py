@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     tenant_id: str | None = None
     client_id: str | None = None
     client_secret: str | None = None
+    api_key: str | None = None
     request_timeout: float = 30.0
 
     @property
