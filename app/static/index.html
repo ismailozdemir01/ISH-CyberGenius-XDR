@@ -36,7 +36,21 @@ body{font-family:system-ui,sans-serif;margin:0;background:#080d18;color:#e5e7eb}
 </div></section></main>
 <script>
 let currentIncident=null;const $=id=>document.getElementById(id);
-async function api(path,options={}){const r=await fetch(path,{headers:{"Content-Type":"application/json",...(options.headers||{})},...options});if(!r.ok)throw new Error(await r.text());return r.json();}
+let apiKey=sessionStorage.getItem("xdr_api_key")||"";
+async function ensureApiKey(){
+  if(apiKey)return true;
+  apiKey=prompt("XDR API key (API_KEY from .env):")||"";
+  if(apiKey)sessionStorage.setItem("xdr_api_key",apiKey);
+  return !!apiKey;
+}
+async function api(path,options={}){
+  if(!(await ensureApiKey()))throw new Error("API key required.");
+  const headers={"Content-Type":"application/json","Authorization":"Bearer "+apiKey,...(options.headers||{})};
+  const r=await fetch(path,{...options,headers});
+  if(r.status===401){sessionStorage.removeItem("xdr_api_key");apiKey="";throw new Error("Unauthorized: enter a valid API key.");}
+  if(!r.ok)throw new Error(await r.text());
+  return r.json();
+}
 async function loadHealth(){try{const h=await api('/health');$('health').textContent=h.graph_configured?'Microsoft APIs configured':'local mode · Microsoft credentials not configured';}catch(e){$('health').textContent=e.message;}}
 async function loadOverview(){try{const d=await api('/api/overview');$('eventCount').textContent=d.telemetry_events;$('corrCount').textContent=d.correlations+' correlations · '+d.devices+' devices';}catch(e){$('eventCount').textContent='-';}}
 async function loadIncidents(){try{const d=await api('/api/incidents?refresh=true');$('incidents').replaceChildren(...d.value.map(x=>{const b=document.createElement('button');b.className='card';b.style.width='100%';b.style.textAlign='left';b.innerHTML='<strong></strong><div class="small"></div>';b.querySelector('strong').textContent=x.name||x.id;b.querySelector('.small').textContent=(x.severity||'unknown')+' · '+(x.status||'unknown');b.onclick=()=>openIncident(x.id);return b;}));await loadOverview();}catch(e){$('incidents').textContent=e.message;}}
