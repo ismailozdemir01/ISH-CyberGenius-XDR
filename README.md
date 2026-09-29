@@ -1,6 +1,6 @@
 # ISH-CyberGenius-XDR
 
-A single defensive XDR investigation workspace built around Microsoft Graph Security and Microsoft Defender for Endpoint APIs.
+A defensive XDR investigation and response workspace built around Microsoft Graph Security and Microsoft Defender for Endpoint APIs. The core analytics are deterministic detection rules, behavioral correlation, ATT&CK mapping and explainable risk scoring; Microsoft APIs provide the external investigation and response integrations.
 
 ## Final stack
 
@@ -21,7 +21,7 @@ A single defensive XDR investigation workspace built around Microsoft Graph Secu
 - Workspace telemetry/correlation overview endpoint.
 - GitHub Actions CI for Python 3.11–3.13.
 
-The application does not fabricate Microsoft responses. Without Microsoft credentials, the local telemetry, detection, correlation, analytics and persistence paths remain usable. Microsoft-backed incident, hunting and response operations require the appropriate Entra application permissions and configured credentials.
+The application does not fabricate Microsoft responses. All `/api/*` endpoints require `Authorization: Bearer <API_KEY>`; `/health` and `/ready` remain unauthenticated operational probes. Without Microsoft credentials, the local telemetry, detection, correlation, analytics and persistence paths remain usable. Microsoft-backed incident, hunting and response operations require the appropriate Entra application permissions and configured credentials.
 
 ## Run
 
@@ -42,6 +42,7 @@ Configure:
 - `DEFENDER_API_BASE_URL`
 - `DATABASE_PATH`
 - `REQUEST_TIMEOUT`
+- `API_KEY` — required to access `/api/*`; use a long random value
 
 ## Operations
 
@@ -78,7 +79,7 @@ The correlation layer is evidence-driven. It joins telemetry already present in 
 - `POST /api/response/unisolate`
 - `GET /api/response/actions`
 
-Isolation and unisolation call Microsoft Defender for Endpoint directly. The dashboard requires an explicit confirmation before these real containment operations.
+Isolation and unisolation call Microsoft Defender for Endpoint directly. The dashboard requires an explicit confirmation before these real containment operations. API authentication is enforced before the request can reach the Defender client.
 
 The Graph client uses the `https://graph.microsoft.com/.default` scope. Advanced Hunting requires the appropriate Microsoft Graph Security application permission; Microsoft documents `ThreatHunting.Read.All` as the least-privileged application permission for `runHuntingQuery`.
 
@@ -92,4 +93,8 @@ Defender for Endpoint response actions use the documented Defender API token aud
 pytest -q
 ```
 
-The CI workflow is the remaining automated verification gate and runs the test suite on Python 3.11, 3.12 and 3.13.
+The CI workflow runs the test suite on Python 3.11, 3.12 and 3.13. If GitHub Actions reports a job-start failure with no executable steps, treat that as CI infrastructure/workflow-run failure rather than as a pytest failure; run `pytest -q` locally to validate the suite.
+
+## Security
+
+See `SECURITY.md` before deploying or changing repository visibility. Before making the repository public, review Git history and enable GitHub secret scanning/push protection and code scanning.
