@@ -21,6 +21,14 @@ body{font-family:system-ui,sans-serif;margin:0;background:#080d18;color:#e5e7eb}
 <h2 id="title"></h2><div id="meta" class="small"></div>
 <div id="riskCard" class="card risk"><div class="small">Incident risk</div><span id="riskScore" class="metric">-</span> <span id="riskBand" class="pill">-</span><pre id="riskFactors">-</pre></div>
 <div class="grid">
+<div class="card"><h3>Voice and Translation</h3>
+<div class="small">Speech is converted to text in the browser. Microsoft Translator detects the source language and translates the text.</div>
+<select id="speechLang"><option value="en-US">English</option><option value="tr-TR">Turkish</option><option value="de-DE">German</option><option value="fr-FR">French</option><option value="es-ES">Spanish</option><option value="auto">Browser language</option></select>
+<div class="row"><button onclick="startSpeech()">Start speech</button><button onclick="stopSpeech()">Stop</button></div>
+<textarea id="voiceText" placeholder="Speech transcript or text"></textarea>
+<select id="targetLanguage"><option value="tr">Turkish</option><option value="en">English</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="ar">Arabic</option></select>
+<button onclick="translateVoice()">Detect and translate</button>
+<pre id="translationResult">No translation yet.</pre></div>
 <div class="card"><h3>Advanced Hunting</h3><textarea id="query">DeviceProcessEvents | limit 20</textarea><input id="timespan" value="P1D"><button onclick="hunt()">Run KQL</button><pre id="huntResult">No query run.</pre></div>
 <div class="card"><h3>Behavioral Correlation</h3><input id="deviceName" placeholder="Optional device name"><input id="windowMinutes" type="number" min="1" max="240" value="15"><button onclick="correlateNow()">Correlate telemetry</button><pre id="correlationResult">No correlation run.</pre></div>
 <div class="card"><h3>Incident update</h3><select id="status"><option value="active">active</option><option value="resolved">resolved</option><option value="redirected">redirected</option></select><input id="classification" placeholder="classification"><input id="determination" placeholder="determination"><button onclick="updateIncident()">Update</button></div>
@@ -50,6 +58,33 @@ async function api(path,options={}){
   if(r.status===401){sessionStorage.removeItem("xdr_api_key");apiKey="";throw new Error("Unauthorized: enter a valid API key.");}
   if(!r.ok)throw new Error(await r.text());
   return r.json();
+}
+let recognition=null;
+function startSpeech(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$('translationResult').textContent='Web Speech API is not available in this browser.';return;}
+  if(recognition) recognition.stop();
+  recognition=new SR();
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  recognition.lang=$('speechLang').value==='auto'?(navigator.language||'en-US'):$('speechLang').value;
+  recognition.onresult=e=>{
+    let text='';
+    for(let i=e.resultIndex;i<e.results.length;i++) text+=e.results[i][0].transcript;
+    $('voiceText').value=text;
+  };
+  recognition.onerror=e=>$('translationResult').textContent='Speech recognition error: '+e.error;
+  recognition.start();
+  $('translationResult').textContent='Listening...';
+}
+function stopSpeech(){if(recognition){recognition.stop();recognition=null;}}
+async function translateVoice(){
+  const text=$('voiceText').value.trim();
+  if(!text)return alert('Enter text or record speech first.');
+  try{
+    const d=await api('/api/translate',{method:'POST',body:JSON.stringify({text,target_language:$('targetLanguage').value})});
+    $('translationResult').textContent=JSON.stringify(d,null,2);
+  }catch(e){$('translationResult').textContent=e.message;}
 }
 async function loadHealth(){try{const h=await api('/health');$('health').textContent=h.graph_configured?'Microsoft APIs configured':'local mode · Microsoft credentials not configured';}catch(e){$('health').textContent=e.message;}}
 async function loadOverview(){try{const d=await api('/api/overview');$('eventCount').textContent=d.telemetry_events;$('corrCount').textContent=d.correlations+' correlations · '+d.devices+' devices';}catch(e){$('eventCount').textContent='-';}}
