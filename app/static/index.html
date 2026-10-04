@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ISH CyberGenius XDR</title>
+<title>OZHEX CyberGenius XDR</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:0;background:#080d18;color:#e5e7eb}header{padding:16px 22px;border-bottom:1px solid #243047;position:sticky;top:0;background:#080d18;z-index:2}main{display:grid;grid-template-columns:330px 1fr;min-height:calc(100vh - 60px)}aside{border-right:1px solid #243047;padding:14px;overflow:auto}section{padding:18px;overflow:auto}button,input,textarea,select{font:inherit;border-radius:6px;border:1px solid #334155;padding:8px;background:#111827;color:#e5e7eb}button{cursor:pointer}button:hover{background:#1f2937}input,textarea,select{width:100%;box-sizing:border-box;margin:5px 0 9px}textarea{min-height:115px}.card{border:1px solid #243047;border-radius:8px;padding:12px;margin:8px 0;background:#0d1526}.card:hover{border-color:#64748b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}pre{white-space:pre-wrap;overflow:auto;background:#020617;padding:12px;border-radius:8px;max-height:430px}.small{color:#94a3b8;font-size:.88rem}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.metric{font-size:1.8rem;font-weight:700}.risk{border-left:4px solid #64748b}.critical{border-left-color:#dc2626}.high{border-left-color:#f97316}.medium{border-left-color:#eab308}.low{border-left-color:#22c55e}.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#1e293b;margin:2px}.muted{opacity:.8}a{color:#93c5fd}
 </style>
 </head>
 <body>
-<header><strong>ISH-CyberGenius-XDR</strong> <span id="health" class="small">loading...</span></header>
+<header><strong>OZHEX-CyberGenius-XDR</strong> <span id="health" class="small">loading...</span></header>
 <main>
 <aside>
 <div class="row"><button onclick="loadIncidents()">Refresh</button><button onclick="loadMachines()">Machines</button></div>
@@ -47,7 +47,7 @@ let currentIncident=null;const $=id=>document.getElementById(id);
 let apiKey=sessionStorage.getItem("xdr_api_key")||"";
 async function ensureApiKey(){
   if(apiKey)return true;
-  apiKey=prompt("XDR API key (API_KEY from .env):")||"";
+  apiKey=prompt("OZHEX XDR API key (API_KEY from .env):")||"";
   if(apiKey)sessionStorage.setItem("xdr_api_key",apiKey);
   return !!apiKey;
 }
