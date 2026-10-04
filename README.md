@@ -47,6 +47,8 @@ The project is designed to make those relationships explicit and auditable inste
 - **API authentication** for every `/api/*` endpoint
 - **Security response headers** and GZip middleware
 - **Health/readiness probes** for deployment and operations
+- **Speech-to-text analyst input** using the browser Web Speech API
+- **Automatic language detection and translation** through Microsoft Translator
 - **Automated CI** across Python 3.11, 3.12 and 3.13
 - **Dependabot security automation** at the repository level
 
@@ -182,6 +184,7 @@ Isolation and unisolation are **real Defender response operations**. They are pr
 | GET | `/api/incidents/{incident_id}/graph` | Entity graph |
 | GET | `/api/incidents/{incident_id}/report` | Markdown report |
 | POST | `/api/hunting` | Run Advanced Hunting |
+| POST | `/api/translate` | Detect source language and translate text |
 | POST | `/api/telemetry` | Ingest telemetry |
 | GET | `/api/telemetry` | Read telemetry |
 | GET | `/api/detections/rules` | List detection rules |
@@ -252,7 +255,10 @@ CLIENT_ID=
 CLIENT_SECRET=
 GRAPH_BASE_URL=https://graph.microsoft.com/v1.0
 DEFENDER_API_BASE_URL=https://api.security.microsoft.com
-DATABASE_PATH=cybergenuis.db
+TRANSLATOR_ENDPOINT=https://api.cognitive.microsofttranslator.com
+TRANSLATOR_KEY=
+TRANSLATOR_REGION=
+DATABASE_PATH=./data/xdr.db
 REQUEST_TIMEOUT=30
 API_KEY=
 ```
@@ -403,6 +409,26 @@ Investigation data, correlation findings and response actions are persisted so a
 The project is intended for detection, investigation, containment and security operations.
 
 ---
+
+## Release status
+
+Version **1.2.0** adds the analyst voice/translation workflow and fixes Python package discovery so editable installation works with the repository image assets. The CI pipeline is the release gate: a final release is considered ready only after all Python 3.11–3.13 jobs are green.
+
+### Voice and translation workflow
+
+The dashboard can use the browser Web Speech API to turn analyst speech into text. The resulting text can be sent to Microsoft Translator, which detects the source language and returns a translation for the selected target language.
+
+Configure these variables for translation:
+
+- `TRANSLATOR_KEY` — Azure AI Translator subscription key
+- `TRANSLATOR_REGION` — Translator resource region when applicable
+- `TRANSLATOR_ENDPOINT` — Translator endpoint
+
+Speech recognition remains browser-side; the backend receives only the resulting text when translation is requested.
+
+### Remaining production gate
+
+The application code and automated test suite are implemented, but Microsoft Graph, Defender, and Translator integrations still require valid credentials for live-environment validation. Do not mark a deployment production-ready until those credentials are configured and real API calls have been verified in the target tenant.
 
 ## Roadmap
 
