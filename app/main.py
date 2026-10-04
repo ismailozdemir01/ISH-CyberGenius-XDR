@@ -13,8 +13,9 @@ from .defender import DefenderClient
 from .detection import detect, RULES
 from .correlation import correlate
 from .report import build_incident_report
+from .translator import TranslatorClient
 
-app=FastAPI(title=settings.app_name, version="1.1.0")
+app=FastAPI(title=settings.app_name, version="1.2.0")
 db=Database(settings.database_path)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -63,8 +64,19 @@ class MachineActionRequest(BaseModel):
 class IsolateRequest(MachineActionRequest):
     isolation_type:Literal["Full","Selective","UnManagedDevice"]="Full"
 
+class TranslationRequest(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    text:str=Field(min_length=1,max_length=20000)
+    target_language:str=Field(pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?$")
+    source_language:str|None=Field(default=None,max_length=20)
+
+def translator() -> TranslatorClient:
+    if not settings.translator_configured:
+        raise HTTPException(503,"Microsoft Translator is not configured. Set TRANSLATOR_KEY.")
+    return TranslatorClient(settings.translator_endpoint,settings.translator_key,settings.translator_region,settings.request_timeout)
+
 @app.get("/health")
-def health(): return {"status":"ok","graph_configured":settings.graph_configured,"api_auth_configured":bool(settings.api_key),"database":settings.database_path,"version":app.version}
+def health(): return {"status":"ok","graph_configured":settings.graph_configured,"translator_configured":settings.translator_configured,"api_auth_configured":bool(settings.api_key),"database":settings.database_path,"version":app.version}
 @app.get("/ready")
 def ready():
     try: db.telemetry(limit=1); return {"status":"ready","graph_configured":settings.graph_configured,"api_auth_configured":bool(settings.api_key)}
@@ -110,6 +122,12 @@ def incident_report(incident_id:str):
 def add_evidence(incident_id:str,req:EvidenceRequest):
     if not db.incident(incident_id): raise HTTPException(404,"Incident not found in local cache")
     return {"id":db.add_evidence(incident_id,req.source_type,req.title,req.data,req.source_id),"incident_id":incident_id}
+@app.post("/api/translate")
+async def translate(req:TranslationRequest):
+    detection=await translator().detect(req.text)
+    result=await translator().translate(req.text,req.target_language,req.source_language or detection.get("language"))
+    return {"source_language":req.source_language or detection.get("language"),"detection":detection,"translation":result}
+
 @app.post("/api/hunting")
 async def hunting(req:HuntingRequest):
     data=await defender().hunting_query(req.query,req.timespan); investigation_id=db.save_investigation(req.incident_id,req.query,data)
