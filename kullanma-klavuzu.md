@@ -1,8 +1,8 @@
-# ISH-CyberGenius-XDR — A'dan Z'ye Kullanım Kılavuzu
+# OZHEX-CyberGenius-XDR — A'dan Z'ye Kullanım Kılavuzu
 
 ## 1. Sistem nedir?
 
-ISH-CyberGenius-XDR; Microsoft Graph Security, Microsoft Defender for Endpoint ve Advanced Hunting verilerini tek bir çalışma alanında birleştiren savunma amaçlı XDR uygulamasıdır.
+OZHEX-CyberGenius-XDR; Microsoft Graph Security, Microsoft Defender for Endpoint ve Advanced Hunting verilerini tek bir çalışma alanında birleştiren savunma amaçlı XDR uygulamasıdır.
 
 Temel akış:
 
@@ -16,6 +16,8 @@ Uygulama tek FastAPI sunucusu ve tek browser istemcisi olarak çalışır. Ayrı
 - **SQLite:** incident, telemetry, investigation, evidence, correlation ve response kayıtları.
 - **Microsoft Graph Security:** incident okuma/yazma, comment ve Advanced Hunting.
 - **Microsoft Defender for Endpoint:** cihaz envanteri ve response işlemleri.
+- **Microsoft Translator:** otomatik dil algılama ve çeviri.
+- **Browser Web Speech API:** analyst speech-to-text.
 - **Dashboard:** `/` adresinden aynı FastAPI process'i tarafından servis edilir.
 - **Swagger:** `/docs`.
 
@@ -26,6 +28,7 @@ Uygulama tek FastAPI sunucusu ve tek browser istemcisi olarak çalışır. Ayrı
 - Git.
 - Microsoft tenant üzerinde gerekli Entra application registration ve API permissions.
 - Gerçek Microsoft entegrasyonu için `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`.
+- Çeviri için `TRANSLATOR_KEY` ve gerektiğinde `TRANSLATOR_REGION`.
 
 ## 4. Kurulum
 
@@ -38,6 +41,8 @@ python -m pip install --upgrade pip
 pip install -e ".[test]"
 Copy-Item .env.example .env
 ```
+
+> GitHub repository adı değiştirildiğinde yukarıdaki clone URL'si yeni OZHEX repository URL'siyle kullanılmalıdır.
 
 Linux/macOS:
 
@@ -62,7 +67,11 @@ CLIENT_SECRET=<client secret>
 DATABASE_PATH=./data/xdr.db
 GRAPH_BASE_URL=https://graph.microsoft.com/v1.0
 DEFENDER_API_BASE_URL=https://api.security.microsoft.com
+TRANSLATOR_ENDPOINT=https://api.cognitive.microsofttranslator.com
+TRANSLATOR_KEY=<translator key>
+TRANSLATOR_REGION=<translator region when required>
 REQUEST_TIMEOUT=30
+API_KEY=<random API key>
 ```
 
 Secret'ı GitHub'a, README'ye veya kaynak koduna koymayın. `.env` dosyasını commit etmeyin.
@@ -71,11 +80,9 @@ Secret'ı GitHub'a, README'ye veya kaynak koduna koymayın. `.env` dosyasını c
 
 Uygulamanın kullandığı işlemler için Microsoft tarafında ilgili application permissions ve admin consent gereklidir. Özellikle incident yazma, Advanced Hunting ve Defender response işlemlerinde tenant'ın izin modelini Microsoft dokümantasyonuna göre yapılandırın.
 
-Uygulama Microsoft credentials yoksa yerel modda başlatılabilir; ancak Microsoft'a bağlı incident, hunting ve response endpointleri credentials olmadan çalışmaz.
+Uygulama Microsoft credentials yoksa yerel modda başlatılabilir; ancak Microsoft'a bağlı incident, hunting, translation ve response endpointleri ilgili credentials olmadan çalışmaz.
 
-## 7. Tek PowerShell ile çalıştırma
-
-Normal kullanımda iki terminal gerekmez. Server ve browser client aynı FastAPI uygulamasındadır.
+## 7. Çalıştırma
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -96,27 +103,20 @@ Health:
 
 ## 8. Dashboard kullanımı
 
-### 8.1 Incident listesi
+Dashboard incident, evidence, hunting, correlation, risk, entity graph, timeline ve response iş akışlarını tek arayüzde sunar.
 
-Dashboard açıldığında incident listesi yüklenir. `Refresh incidents` Microsoft tarafındaki mevcut incident verisini yeniler.
+### Voice & Translation
 
-### 8.2 Incident seçimi
+1. Tarayıcı mikrofon iznini verin.
+2. Speech language seçin veya browser language kullanın.
+3. `Start speech` ile konuşun.
+4. Oluşan metni kontrol edin.
+5. Hedef dili seçin.
+6. `Detect and translate` ile Microsoft Translator'a gönderin.
 
-Bir incident seçildiğinde:
+Speech recognition browser tarafında gerçekleşir; çeviri istendiğinde yalnızca ortaya çıkan metin backend'e gönderilir.
 
-- severity
-- status
-- classification
-- determination
-- evidence
-- investigation history
-- response history
-- correlation findings
-- risk bilgisi
-
-aynı çalışma alanında görüntülenir.
-
-### 8.3 Advanced Hunting
+### Advanced Hunting
 
 KQL alanına Microsoft Advanced Hunting sorgusu girin. Örnek:
 
@@ -125,45 +125,15 @@ DeviceProcessEvents
 | limit 20
 ```
 
-Incident seçiliyken `Run KQL` kullanıldığında sonuç investigation kaydı olarak saklanır ve incident evidence'ına bağlanır.
+### Behavioral Correlation
 
-### 8.4 Behavioral Correlation
+Telemetry sisteme alındığında correlation motoru olayları zaman ve cihaz bağlamında ilişkilendirir.
 
-Telemetry daha önce sisteme alınmışsa correlation motoru ilgili olayları zaman ve cihaz bağlamında ilişkilendirir.
+### Machine isolation
 
-Örnek davranışlar:
+Bir cihazı izole etmek gerçek Defender response işlemidir. Machine ID, comment ve isolation type girilip açık onay verildiğinde gerçek Microsoft Defender API çağrısı yapılır.
 
-- encoded PowerShell
-- PowerShell process activity
-- network activity
-- RDP activity
-- aynı cihazdaki kısa zaman aralıklı olay zincirleri
-
-### 8.5 Evidence
-
-Hunting, correlation ve response çıktıları incident ile ilişkilendirilerek kalıcı evidence olarak saklanır.
-
-### 8.6 Machine inventory
-
-`Machines` düğmesi Defender for Endpoint cihaz envanterini getirir.
-
-### 8.7 Isolation
-
-Bir cihazı izole etmek gerçek Defender response işlemidir.
-
-1. Machine ID girin.
-2. Comment girin.
-3. Isolation type seçin.
-4. `Isolate` düğmesine basın.
-5. Confirmation ekranını onaylayın.
-
-Bu işlem test/mock değildir; bağlı Defender tenantında gerçek containment işlemi yapar.
-
-### 8.8 Unisolate
-
-Aynı şekilde gerçek Defender release-from-isolation işlemini başlatır. Yalnızca yetkili operasyonlarda kullanın.
-
-### 8.9 Report
+### Report
 
 Incident report bağlantısı incident, evidence, investigation ve response geçmişini Markdown formatında üretir.
 
@@ -180,6 +150,7 @@ POST /api/incidents/{incident_id}/comments
 POST /api/incidents/{incident_id}/evidence
 GET  /api/incidents/{incident_id}/report
 POST /api/hunting
+POST /api/translate
 GET  /api/machines
 POST /api/response/isolate
 POST /api/response/unisolate
@@ -195,66 +166,16 @@ GET  /api/detections/rules
 
 Tam request/response şemaları `/docs` üzerinde görülebilir.
 
-## 10. Yerel telemetry
-
-Defender Advanced Hunting biçimine benzeyen JSON olayları `/api/telemetry` ile içeri alınabilir. Bu özellik entegrasyon ve detection/correlation geliştirme içindir; Microsoft tenantından veri geliyormuş gibi sahte response üretmez.
-
-## 11. Risk analizi
-
-Risk motoru incident/correlation verilerinden açıklanabilir faktörler çıkarır. Skor tek başına karar mekanizması değildir; analyst tarafından evidence ve timeline ile birlikte değerlendirilmelidir.
-
-## 12. Attack timeline
-
-Timeline; incident, evidence, investigation, correlation ve response kayıtlarını kronolojik çalışma görünümüne dönüştürür.
-
-## 13. Veritabanı
-
-Varsayılan SQLite dosyası:
-
-```text
-./data/xdr.db
-```
-
-Üretim ortamında düzenli yedekleme ve erişim kontrolü uygulanmalıdır.
-
-## 14. Testler
+## 10. Testler
 
 ```powershell
+python -m compileall -q app tests
 pytest -q
 ```
 
-CI aynı testleri desteklenen Python sürümleri üzerinde çalıştırır.
+CI Python 3.11, 3.12 ve 3.13 üzerinde aynı test kapısını çalıştırır.
 
-## 15. Sorun giderme
-
-### `/` açılmıyor
-
-- Virtual environment aktif mi?
-- `pip install -e ".[test]"` çalıştı mı?
-- `python main.py` process'i çalışıyor mu?
-- Port 8000 başka process tarafından kullanılıyor mu?
-
-### `graph_configured=false`
-
-`.env` içinde üç değer kontrol edin:
-
-```text
-TENANT_ID
-CLIENT_ID
-CLIENT_SECRET
-```
-
-Server'ı credentials değişikliğinden sonra yeniden başlatın.
-
-### Microsoft API 401/403
-
-Token audience, application permission, admin consent ve tenant policy yapılandırmasını kontrol edin.
-
-### Isolation 403
-
-Defender response için gerekli application permission ve ilgili Defender yetkilendirmelerini kontrol edin.
-
-## 16. Güvenlik
+## 11. Güvenlik
 
 - `.env` commit edilmemelidir.
 - Client secret kaynak kodunda tutulmamalıdır.
@@ -262,31 +183,14 @@ Defender response için gerekli application permission ve ilgili Defender yetkil
 - Production deployment reverse proxy, TLS, authentication ve network access control ile korunmalıdır.
 - Response endpointleri gerçek sistemlere etki ettiğinden RBAC ve operasyon onayı uygulanmalıdır.
 
-## 17. Production yaklaşımı
+## 12. Production yaklaşımı
 
-Tek process küçük/orta ölçekli kullanım için yeterlidir. Kurumsal kullanımda FastAPI uygulaması reverse proxy arkasında, merkezi secret management, TLS, identity-aware access, audit log shipping ve yedekleme ile çalıştırılmalıdır.
+Kurumsal kullanımda FastAPI reverse proxy arkasında, merkezi secret management, TLS, identity-aware access, audit log shipping ve yedekleme ile çalıştırılmalıdır.
 
-## 18. Kapatma
-
-PowerShell penceresinde:
+## 13. Operasyon akışı
 
 ```text
-Ctrl+C
-```
-
-## 19. Önerilen operasyon akışı
-
-```text
-1. Incident'i aç
-2. Evidence'i incele
-3. KQL ile hunting yap
-4. Correlation çalıştır
-5. Entity ve timeline'ı incele
-6. Risk faktörlerini doğrula
-7. Gerekliyse containment uygula
-8. Response sonucunu doğrula
-9. Incident'i güncelle
-10. Report oluştur
+Incident → Evidence → Hunting → Correlation → Entity/Timeline → Risk → Containment → Verification → Report
 ```
 
 Bu akış analyst kararını desteklemek içindir; response işlemleri açıkça yetkilendirilmiş operasyonlar olmalıdır.
