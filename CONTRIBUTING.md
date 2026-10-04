@@ -1,6 +1,6 @@
-# Contributing to ISH-CyberGenius-XDR
+# Contributing to OZHEX-CyberGenius-XDR
 
-Thank you for contributing to ISH-CyberGenius-XDR.
+Thank you for contributing to OZHEX-CyberGenius-XDR.
 
 The project focuses on defensive XDR investigation, detection, behavioral correlation, ATT&CK mapping, explainable risk analysis, evidence management and security response.
 
