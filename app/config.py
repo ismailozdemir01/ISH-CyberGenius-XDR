@@ -1,8 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-    app_name: str = "ISH-CyberGenius-XDR"
+    app_name: str = "OZHEX-CyberGenius-XDR"
     database_path: str = "./data/xdr.db"
     graph_base_url: str = "https://graph.microsoft.com/v1.0"
     defender_api_base_url: str = "https://api.security.microsoft.com"
@@ -22,5 +23,6 @@ class Settings(BaseSettings):
     @property
     def translator_configured(self) -> bool:
         return bool(self.translator_key)
+
 
 settings = Settings()
