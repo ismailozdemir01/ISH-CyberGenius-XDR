@@ -1,11 +1,11 @@
-# ISH-CyberGenius-XDR — Çalıştırma Kılavuzu
+# OZHEX-CyberGenius-XDR — Çalıştırma Kılavuzu
 
-## 1. En kısa yol — Windows / tek PowerShell
+## 1. Windows / tek PowerShell
 
 Repository'yi klonladıktan sonra:
 
 ```powershell
-cd ISH-CyberGenius-XDR
+cd OZHEX-CyberGenius-XDR
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -31,223 +31,80 @@ Swagger:
 http://127.0.0.1:8000/docs
 ```
 
-## 2. Server + client mimarisi
-
-Bu projede ayrı bir frontend/client server çalıştırmak zorunda değilsiniz.
-
-Tek process:
+## 2. Tek process mimarisi
 
 ```text
 PowerShell
    │
    └── python main.py
-          │
           ├── FastAPI API
-          ├── Browser Dashboard
+          ├── OZHEX-CyberGenius-XDR Dashboard
           ├── SQLite
           ├── Microsoft Graph Security
-          └── Microsoft Defender for Endpoint
+          ├── Microsoft Defender for Endpoint
+          └── Microsoft Translator
 ```
 
-Browser sadece HTTP client olarak çalışır. Dashboard dosyaları FastAPI tarafından servis edilir.
+Browser yalnızca HTTP client olarak çalışır. Ayrı frontend server zorunlu değildir.
 
-Dolayısıyla normal kullanımda **tek PowerShell yeterlidir**.
-
-## 3. `main.py`
-
-Repository kökünde `main.py` varsa aşağıdaki komutla doğrudan başlatılır:
+## 3. Uvicorn
 
 ```powershell
-python main.py
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Eğer geliştirme sırasında doğrudan Uvicorn kullanmak isterseniz:
+Geliştirme:
 
 ```powershell
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Production benzeri yerel çalıştırma:
+`--reload` production için kullanılmamalıdır.
 
-```powershell
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-`0.0.0.0` kullanımı uygulamayı ağ arayüzlerine açabileceği için güvenilir ağ ortamı dışında kullanılmamalıdır.
-
-## 4. Otomatik kurulum/başlatma
-
-Önerilen Windows başlangıç komutu:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\.venv\Scripts\Activate.ps1
-python main.py
-```
-
-## 5. İlk çalıştırma kontrolü
-
-Server başladıktan sonra:
+## 4. İlk kontrol
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8000/health | Select-Object -ExpandProperty Content
 ```
 
-Beklenen yapı:
+Health yanıtındaki `version`, `graph_configured` ve `translator_configured` alanlarını kontrol edin.
 
-```json
-{
-  "status": "ok",
-  "graph_configured": true,
-  "database": "./data/xdr.db",
-  "version": "1.0.0"
-}
-```
-
-`graph_configured: false` olması uygulamanın local olarak çalışabildiğini, fakat Microsoft credentials'ın yapılandırılmadığını gösterir.
-
-## 6. `.env` yapılandırması
-
-```env
-TENANT_ID=<tenant-id>
-CLIENT_ID=<client-id>
-CLIENT_SECRET=<secret>
-DATABASE_PATH=./data/xdr.db
-GRAPH_BASE_URL=https://graph.microsoft.com/v1.0
-DEFENDER_API_BASE_URL=https://api.security.microsoft.com
-REQUEST_TIMEOUT=30
-```
-
-Secret değerlerini shell history, Git commit veya public loglara yazmayın.
-
-## 7. İki PowerShell gerekli mi?
-
-**Hayır.** Normal çalışma için:
-
-```text
-PowerShell #1 → python main.py
-Browser     → http://127.0.0.1:8000/
-```
-
-yeterlidir.
-
-İkinci PowerShell yalnızca geliştirme sırasında örneğin test çalıştırmak için kullanılabilir:
+## 5. Test
 
 ```powershell
+.\.venv\Scripts\Activate.ps1
+python -m compileall -q app tests
 pytest -q
 ```
 
-Bu ikinci terminal bir client server değildir.
+CI Python 3.11, 3.12 ve 3.13 üzerinde çalışır.
 
-## 8. Port değiştirme
+## 6. Güvenli varsayılan
 
-Örneğin 8080:
-
-```powershell
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8080
-```
-
-Dashboard:
-
-```text
-http://127.0.0.1:8080/
-```
-
-## 9. Firewall / ağ erişimi
-
-Yerel kullanım için `127.0.0.1` tercih edin.
-
-Başka bir makinenin bağlanması gerekiyorsa kontrollü private network kullanın ve authentication/TLS olmadan uygulamayı internete açmayın.
-
-## 10. Test
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-pytest -q
-```
-
-## 11. Durdurma
-
-Server terminalinde:
-
-```text
-Ctrl+C
-```
-
-## 12. Temiz yeniden başlatma
-
-```powershell
-Ctrl+C
-.\.venv\Scripts\Activate.ps1
-python main.py
-```
-
-## 13. Veritabanını sıfırlama
-
-Dikkat: bu işlem lokal incident/evidence/investigation/response geçmişini siler.
-
-Server'ı durdurduktan sonra:
-
-```powershell
-Remove-Item .\data\xdr.db -ErrorAction SilentlyContinue
-python main.py
-```
-
-Microsoft tenantındaki kayıtlar bu işlemle silinmez; yalnızca yerel SQLite cache/history temizlenir.
-
-## 14. Production başlatma
-
-Geliştirme sunucusundaki `--reload` production için kullanılmamalıdır.
-
-Örnek:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
-```
-
-Production ortamında ayrıca reverse proxy, TLS, authentication, secret management, backup ve merkezi audit logging uygulanmalıdır.
-
-## 15. Çalışma sırası
-
-```text
-START
-  ↓
-Python environment
-  ↓
-.env yüklenir
-  ↓
-FastAPI başlar
-  ↓
-SQLite hazırlanır
-  ↓
-Browser dashboard açılır
-  ↓
-Microsoft Graph / Defender bağlantısı gerektiğinde kullanılır
-  ↓
-Incident → Hunting → Correlation → Evidence → Response
-```
-
-## 16. Hızlı hata tablosu
-
-| Belirti | Kontrol |
-|---|---|
-| `python` bulunamadı | Python 3.11+ PATH/launcher |
-| `No module named app` | Proje kökünden çalıştırın |
-| `/` açılmıyor | Server terminalindeki traceback |
-| Port 8000 dolu | Başka port kullanın |
-| `graph_configured=false` | `.env` credentials |
-| 401 | Credentials/token yapılandırması |
-| 403 | Microsoft API permission/admin consent |
-| Isolation başarısız | Defender response permission/policy |
-| DB açılamıyor | `data/` klasörü ve filesystem permission |
-
-## 17. Güvenli varsayılan
-
-İlk kurulumda uygulamayı localhost'ta çalıştırın:
+İlk kurulumda localhost kullanın:
 
 ```powershell
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 İşletim sistemi firewall'ını kapatmayın. Uygulamayı doğrudan public Internet'e bağlamayın.
+
+## 7. Durdurma
+
+```text
+Ctrl+C
+```
+
+## 8. Sorun giderme
+
+| Belirti | Kontrol |
+|---|---|
+| `python` bulunamadı | Python 3.11+ PATH/launcher |
+| `No module named app` | Proje kökünden çalıştırın |
+| `/` açılmıyor | Server traceback |
+| Port 8000 dolu | Başka port kullanın |
+| `graph_configured=false` | `.env` Microsoft credentials |
+| `translator_configured=false` | `TRANSLATOR_KEY` |
+| 401 | API key |
+| 403 | Microsoft permission/admin consent |
+| Isolation başarısız | Defender response permission/policy |
