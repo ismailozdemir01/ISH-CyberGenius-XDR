@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     license_dispatch_enabled: bool = True
     license_dispatch_timeout: float = 15.0
     license_fail_closed_revocation: bool = True
+    license_callback_url: str | None = None
+    license_callback_secret: str | None = None
 
     @property
     def graph_configured(self) -> bool:
