@@ -170,6 +170,49 @@ class Database:
             d = dict(r); d["request"] = json.loads(d.pop("request_json")); d["result"] = json.loads(d.pop("result_json")); out.append(d)
         return out
 
+    def upsert_gumroad_license(self, sale: dict[str, Any], raw_payload: dict[str, Any]) -> dict[str, Any]:
+        license_key = sale["license_key"]
+        now = utcnow()
+        try:
+            quantity = max(1, int(sale.get("quantity") or 1))
+        except (TypeError, ValueError):
+            quantity = 1
+        plan = sale.get("variants") or "default"
+        with self.connect() as con:
+            con.execute(
+                """INSERT INTO licenses
+                (license_key,product_permalink,email,order_number,full_name,plan,status,price,currency,variants,quantity,raw_json,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(license_key) DO UPDATE SET
+                  product_permalink=excluded.product_permalink,email=excluded.email,order_number=excluded.order_number,
+                  full_name=excluded.full_name,plan=excluded.plan,price=excluded.price,currency=excluded.currency,
+                  variants=excluded.variants,quantity=excluded.quantity,raw_json=excluded.raw_json,updated_at=excluded.updated_at""",
+                (license_key, sale["product_permalink"], sale.get("email"), sale.get("order_number"), sale.get("full_name"),
+                 plan, "active", sale.get("price"), sale.get("currency"), sale.get("variants"), quantity,
+                 json.dumps(raw_payload), now, now),
+            )
+            row = con.execute(
+                "SELECT id,license_key,product_permalink,email,order_number,full_name,plan,status,price,currency,variants,quantity,uses,seats,created_at,updated_at FROM licenses WHERE license_key=?",
+                (license_key,),
+            ).fetchone()
+        return dict(row)
+
+    def license(self, license_key: str) -> dict[str, Any] | None:
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT id,license_key,product_permalink,email,order_number,full_name,plan,status,price,currency,variants,quantity,uses,seats,created_at,updated_at FROM licenses WHERE license_key=?",
+                (license_key,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def licenses(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT id,license_key,product_permalink,email,order_number,full_name,plan,status,price,currency,variants,quantity,uses,seats,created_at,updated_at FROM licenses ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def save_correlations(self, incident_id: str | None, findings: list[dict[str, Any]]) -> int:
         if not findings:
             return 0
