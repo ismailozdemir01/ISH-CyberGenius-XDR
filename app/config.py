@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     client_secret: str | None = None
     api_key: str | None = None
     request_timeout: float = 30.0
+    gumroad_api_base_url: str = "https://api.gumroad.com"
+    gumroad_product_permalink: str | None = None
+    gumroad_ping_secret: str | None = None
 
     @property
     def graph_configured(self) -> bool:
