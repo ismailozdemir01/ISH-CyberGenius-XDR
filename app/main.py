@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import httpx
 from typing import Any, Literal
 from secrets import compare_digest
 from fastapi import FastAPI, HTTPException, Request
@@ -14,15 +16,16 @@ from .detection import detect, RULES
 from .correlation import correlate
 from .report import build_incident_report
 from .translator import TranslatorClient
-from .licensing import GumroadClient, GumroadError, gumroad_sale_fields
+from .licensing import GumroadClient, GumroadError, gumroad_sale_fields, dispatch_license_workflow
+from .license_tokens import verify_token, verify_revocation_manifest, validate_payload
 
-app=FastAPI(title=settings.app_name, version="1.3.0")
+app=FastAPI(title=settings.app_name, version="1.4.0")
 db=Database(settings.database_path)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/gumroad/ping/"):
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/gumroad/ping/") and not request.url.path.startswith("/api/license/activate") and not request.url.path.startswith("/api/license/verify-token"):
         if not settings.api_key:
             return PlainTextResponse("API authentication is not configured.", status_code=503)
         auth=request.headers.get("Authorization","")
@@ -65,11 +68,45 @@ class MachineActionRequest(BaseModel):
 class IsolateRequest(MachineActionRequest):
     isolation_type:Literal["Full","Selective","UnManagedDevice"]="Full"
 
+class LicenseActivationRequest(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    token:str=Field(min_length=20,max_length=10000)
+    device_id:str=Field(min_length=8,max_length=500)
+
+class LicenseVerifyRequest(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    token:str=Field(min_length=20,max_length=10000)
+
 class TranslationRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
     text:str=Field(min_length=1,max_length=20000)
     target_language:str=Field(pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?$")
     source_language:str|None=Field(default=None,max_length=20)
+
+
+
+async def revoked_license_ids() -> set[str]:
+    if not settings.license_revocation_url:
+        return set()
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            response = await client.get(settings.license_revocation_url)
+            response.raise_for_status()
+        return verify_revocation_manifest(response.text, settings.license_public_key or "")
+    except Exception as exc:
+        if settings.license_fail_closed_revocation:
+            raise HTTPException(503, f"License revocation service unavailable: {exc}") from exc
+        return set()
+
+def verified_license_payload(token: str) -> dict[str, Any]:
+    if not settings.license_public_key:
+        raise HTTPException(503, "LICENSE_PUBLIC_KEY is not configured.")
+    try:
+        payload = verify_token(token, settings.license_public_key)
+        validate_payload(payload, settings.license_product)
+    except ValueError as exc:
+        raise HTTPException(401, str(exc)) from exc
+    return payload
 
 def translator() -> TranslatorClient:
     if not settings.translator_configured:
@@ -148,12 +185,30 @@ async def gumroad_ping(ping_secret: str, request: Request):
         from urllib.parse import parse_qs
         payload = {k: v[-1] for k, v in parse_qs(raw.decode("utf-8"), keep_blank_values=True).items()}
     sale = gumroad_sale_fields(payload)
-    if not sale["license_key"]:
-        raise HTTPException(422, "Gumroad license key is missing. Enable license keys for the Gumroad product.")
     if settings.gumroad_product_permalink and sale["product_permalink"] != settings.gumroad_product_permalink:
         return {"status": "ignored", "reason": "product_not_configured"}
+    if not sale["license_key"]:
+        sale["license_key"] = "GUMROAD-" + (sale["order_number"] or hashlib.sha256(raw).hexdigest()[:24])
     license_row = db.upsert_gumroad_license(sale, payload)
-    return {"status": "ok", "license": license_row}
+    dispatched = False
+    dispatch_error = None
+    if settings.license_dispatch_enabled and settings.github_actions_token:
+        try:
+            await dispatch_license_workflow(
+                github_token=settings.github_actions_token,
+                repository=settings.github_license_repo,
+                workflow=settings.github_license_workflow,
+                ref=settings.github_license_ref,
+                email=sale["email"],
+                plan=sale["variants"] or "Professional",
+                order_number=sale["order_number"],
+                gumroad_license=sale.get("license_key", ""),
+                timeout=settings.license_dispatch_timeout,
+            )
+            dispatched = True
+        except GumroadError as exc:
+            dispatch_error = str(exc)
+    return {"status": "ok", "license": license_row, "license_workflow_dispatched": dispatched, "dispatch_error": dispatch_error}
 
 
 @app.post("/api/license/verify")
@@ -174,6 +229,37 @@ async def verify_license(request: Request):
         raise HTTPException(502, str(exc)) from exc
     return result
 
+
+
+
+
+@app.post("/api/license/verify-token")
+async def verify_signed_license(req: LicenseVerifyRequest):
+    payload = verified_license_payload(req.token)
+    if payload["license_id"] in await revoked_license_ids():
+        raise HTTPException(403, "License is revoked")
+    return {"status": "valid", "license": payload}
+
+
+@app.post("/api/license/activate")
+async def activate_signed_license(req: LicenseActivationRequest):
+    payload = verified_license_payload(req.token)
+    if payload["license_id"] in await revoked_license_ids():
+        raise HTTPException(403, "License is revoked")
+    device_hash = hashlib.sha256(req.device_id.encode("utf-8")).hexdigest()
+    try:
+        activation = db.activate_license(
+            payload["license_id"],
+            device_hash,
+            int(payload["max_activations"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {
+        "status": "active",
+        "license": payload,
+        "activation": activation,
+    }
 
 @app.get("/api/licenses")
 def licenses(limit: int = 100):
