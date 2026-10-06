@@ -25,7 +25,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/gumroad/ping/") and not request.url.path.startswith("/api/license/activate") and not request.url.path.startswith("/api/license/verify-token"):
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/gumroad/ping/") and not request.url.path.startswith("/api/license/activate") and not request.url.path.startswith("/api/license/verify-token") and not request.url.path.startswith("/api/license/issue-callback"):
         if not settings.api_key:
             return PlainTextResponse("API authentication is not configured.", status_code=503)
         auth=request.headers.get("Authorization","")
@@ -72,6 +72,13 @@ class LicenseActivationRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
     token:str=Field(min_length=20,max_length=10000)
     device_id:str=Field(min_length=8,max_length=500)
+
+class LicenseCallbackRequest(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    token:str=Field(min_length=20,max_length=10000)
+    license_id:str=Field(min_length=8,max_length=100)
+    email:str|None=Field(default=None,max_length=320)
+    order_number:str|None=Field(default=None,max_length=200)
 
 class LicenseVerifyRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
@@ -231,6 +238,32 @@ async def verify_license(request: Request):
 
 
 
+
+
+
+
+
+@app.post("/api/license/issue-callback")
+async def license_issue_callback(req: LicenseCallbackRequest, request: Request):
+    if not settings.license_callback_secret:
+        raise HTTPException(503, "LICENSE_CALLBACK_SECRET is not configured.")
+    auth=request.headers.get("Authorization","")
+    if not auth.startswith("Bearer ") or not compare_digest(auth[7:], settings.license_callback_secret):
+        raise HTTPException(401, "Unauthorized")
+    payload=verified_license_payload(req.token)
+    if payload["license_id"] != req.license_id:
+        raise HTTPException(400, "license_id does not match signed token")
+    if payload["license_id"] in await revoked_license_ids():
+        raise HTTPException(409, "License is already revoked")
+    row=db.save_issued_license(req.license_id,req.token,req.email or "",req.order_number or "")
+    return {"status":"stored","license_id":row["license_id"],"created_at":row["created_at"]}
+
+@app.get("/api/license/{license_id}/token")
+def get_issued_license_token(license_id: str):
+    token=db.issued_license_token(license_id)
+    if not token:
+        raise HTTPException(404, "Issued license not found")
+    return {"license_id":license_id,"token":token}
 
 
 @app.post("/api/license/verify-token")
