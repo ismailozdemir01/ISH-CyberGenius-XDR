@@ -38,7 +38,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   issue:
@@ -101,12 +100,34 @@ jobs:
           test -n "$OZHEX_LICENSE_PRIVATE_KEY"
           python scripts/issue_license.py             --email "${{ steps.request.outputs.email }}"             --plan "${{ steps.request.outputs.plan }}"             --days "${{ steps.request.outputs.days }}"             --max-activations "${{ steps.request.outputs.max_activations }}"             --order-number "${{ steps.request.outputs.order }}"             --gumroad-license "${{ steps.request.outputs.gumroad }}"             --output ozhex-license.lic
 
-      - name: Upload customer license artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ozhex-license-${{ github.run_id }}
-          path: |
-            ozhex-license.lic
-            ozhex-license.lic.json
-          retention-days: 30
-          if-no-files-found: error
+      - name: Secure license handoff
+        env:
+          LICENSE_CALLBACK_URL: ${{ secrets.OZHEX_LICENSE_CALLBACK_URL }}
+          LICENSE_CALLBACK_SECRET: ${{ secrets.OZHEX_LICENSE_CALLBACK_SECRET }}
+        run: |
+          test -n "$LICENSE_CALLBACK_URL"
+          test -n "$LICENSE_CALLBACK_SECRET"
+          python - <<'PY'
+          import json, os, urllib.request
+          token = open("ozhex-license.lic", encoding="utf-8").read().strip()
+          metadata = json.load(open("ozhex-license.lic.json", encoding="utf-8"))
+          payload = json.dumps({
+              "token": token,
+              "license_id": metadata["license_id"],
+              "email": "${{ steps.request.outputs.email }}",
+              "order_number": "${{ steps.request.outputs.order }}",
+          }).encode()
+          req = urllib.request.Request(
+              os.environ["LICENSE_CALLBACK_URL"],
+              data=payload,
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + os.environ["LICENSE_CALLBACK_SECRET"],
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=20) as response:
+              if response.status >= 300:
+                  raise SystemExit(f"License callback failed: HTTP {response.status}")
+          print("Signed license securely handed off to the configured OZHEX callback.")
+          PY
