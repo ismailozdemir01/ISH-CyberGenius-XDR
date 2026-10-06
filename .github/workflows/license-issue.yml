@@ -1,0 +1,112 @@
+name: OZHEX License Issuance
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Customer email
+        required: true
+        type: string
+      plan:
+        description: License plan
+        required: true
+        default: Professional
+        type: choice
+        options: [Professional, Enterprise, MSSP]
+      days:
+        description: License duration in days; 0 means perpetual
+        required: true
+        default: "0"
+        type: string
+      max_activations:
+        description: Maximum device activations
+        required: true
+        default: "3"
+        type: string
+      order_number:
+        description: Gumroad order number
+        required: false
+        default: ""
+        type: string
+      gumroad_license:
+        description: Gumroad license key; stored only as a hash in the artifact metadata
+        required: false
+        default: ""
+        type: string
+  repository_dispatch:
+    types: [gumroad-sale]
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install license dependencies
+        run: python -m pip install -e .
+
+      - name: Resolve request
+        id: request
+        env:
+          EVENT_EMAIL: ${{ github.event.client_payload.email }}
+          EVENT_PLAN: ${{ github.event.client_payload.plan }}
+          EVENT_DAYS: ${{ github.event.client_payload.days }}
+          EVENT_MAX_ACTIVATIONS: ${{ github.event.client_payload.max_activations }}
+          EVENT_ORDER: ${{ github.event.client_payload.order_number }}
+          EVENT_GUMROAD_LICENSE: ${{ github.event.client_payload.gumroad_license }}
+          INPUT_EMAIL: ${{ inputs.email }}
+          INPUT_PLAN: ${{ inputs.plan }}
+          INPUT_DAYS: ${{ inputs.days }}
+          INPUT_MAX_ACTIVATIONS: ${{ inputs.max_activations }}
+          INPUT_ORDER: ${{ inputs.order_number }}
+          INPUT_GUMROAD_LICENSE: ${{ inputs.gumroad_license }}
+        run: |
+          python - <<'PY'
+          import os
+          def pick(event, manual, default=""):
+              return event if event else (manual if manual else default)
+          values = {
+              "email": pick(os.environ["EVENT_EMAIL"], os.environ["INPUT_EMAIL"]),
+              "plan": pick(os.environ["EVENT_PLAN"], os.environ["INPUT_PLAN"], "Professional"),
+              "days": pick(os.environ["EVENT_DAYS"], os.environ["INPUT_DAYS"], "0"),
+              "max_activations": pick(os.environ["EVENT_MAX_ACTIVATIONS"], os.environ["INPUT_MAX_ACTIVATIONS"], "3"),
+              "order": pick(os.environ["EVENT_ORDER"], os.environ["INPUT_ORDER"]),
+              "gumroad": pick(os.environ["EVENT_GUMROAD_LICENSE"], os.environ["INPUT_GUMROAD_LICENSE"]),
+          }
+          if not values["email"] or "@" not in values["email"]:
+              raise SystemExit("A valid customer email is required")
+          for key in ("days", "max_activations"):
+              int(values[key])
+          for key, value in values.items():
+              print(f"{key}={value}")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+                  out.write(f"{key}={value}\n")
+          PY
+
+      - name: Generate signed license
+        env:
+          OZHEX_LICENSE_PRIVATE_KEY: ${{ secrets.OZHEX_LICENSE_PRIVATE_KEY }}
+        run: |
+          test -n "$OZHEX_LICENSE_PRIVATE_KEY"
+          python scripts/issue_license.py             --email "${{ steps.request.outputs.email }}"             --plan "${{ steps.request.outputs.plan }}"             --days "${{ steps.request.outputs.days }}"             --max-activations "${{ steps.request.outputs.max_activations }}"             --order-number "${{ steps.request.outputs.order }}"             --gumroad-license "${{ steps.request.outputs.gumroad }}"             --output ozhex-license.lic
+
+      - name: Upload customer license artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ozhex-license-${{ github.run_id }}
+          path: |
+            ozhex-license.lic
+            ozhex-license.lic.json
+          retention-days: 30
+          if-no-files-found: error
