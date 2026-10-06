@@ -185,6 +185,27 @@ Live Microsoft tenant validation remains environment-dependent and requires vali
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Run compile checks and the full pytest suite before submitting changes.
 
+
+## Gumroad lisans otomasyonu
+
+Gumroad ürününde **License Keys** özelliğini etkinleştirdiğinizde Gumroad her satış için lisans anahtarını otomatik üretir ve müşterinin makbuzunda/ürün erişiminde gösterir. OZHEX-CyberGenius-XDR artık bu anahtarı Gumroad Ping üzerinden otomatik olarak yerel lisans kayıtlarına alabilir. Böylece müşteriye elle key üretip göndermeniz gerekmez.
+
+Sunucu ortamında şu değişkenleri tanımlayın:
+
+    GUMROAD_API_BASE_URL=https://api.gumroad.com
+    GUMROAD_PRODUCT_PERMALINK=YOUR_GUMROAD_PRODUCT_PERMALINK
+    GUMROAD_PING_SECRET=LONG_RANDOM_SECRET
+
+Gumroad **Settings → Advanced → Ping** bölümünde şu endpoint'i kullanın:
+
+    https://YOUR_DOMAIN/api/gumroad/ping/LONG_RANDOM_SECRET
+
+Satış akışı: **Gumroad ödeme → Gumroad license key'i otomatik üretir → Gumroad Ping → OZHEX webhook → SQLite lisans kaydı → Gumroad API ile doğrulama.**
+
+> `GUMROAD_PING_SECRET` uzun ve rastgele olmalıdır. Gumroad Ping imzalı webhook değildir; endpoint URL'sindeki gizli değer webhook kimlik doğrulamasıdır. Gerçek ticari kullanımda HTTPS zorunludur.
+
+Lisans doğrulama endpoint'i Gumroad'un lisans doğrulama API'sini kullanır; böylece iade/devre dışı bırakılmış key'ler için yalnızca yerel kayda güvenilmez.
+
 ## License
 
 **Proprietary / All Rights Reserved.** The public GitHub repository is source-visible for evaluation and security review; it is not open-source software. Commercial use, redistribution, resale, and production deployment require a separate OZHEX commercial license. Commercial licenses are sold through the official OZHEX product offering, including Gumroad.
