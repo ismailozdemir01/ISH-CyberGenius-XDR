@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS licenses (
 CREATE INDEX IF NOT EXISTS idx_licenses_email ON licenses(email);
 CREATE INDEX IF NOT EXISTS idx_licenses_order ON licenses(order_number);
 CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status);
+CREATE TABLE IF NOT EXISTS license_activations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  license_id TEXT NOT NULL,
+  device_hash TEXT NOT NULL,
+  activated_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  UNIQUE(license_id, device_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_license_activations_license ON license_activations(license_id);
 """
 
 def utcnow() -> str:
@@ -234,6 +243,23 @@ class Database:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def activate_license(self, license_id: str, device_hash: str, max_activations: int) -> dict[str, Any]:
+        now = utcnow()
+        with self.connect() as con:
+            row = con.execute("SELECT * FROM license_activations WHERE license_id=? AND device_hash=?", (license_id, device_hash)).fetchone()
+            if row:
+                con.execute("UPDATE license_activations SET last_seen_at=? WHERE id=?", (now, row["id"]))
+                return {"activated": True, "new_activation": False, "activation_count": con.execute("SELECT COUNT(*) FROM license_activations WHERE license_id=?", (license_id,)).fetchone()[0]}
+            count = con.execute("SELECT COUNT(*) FROM license_activations WHERE license_id=?", (license_id,)).fetchone()[0]
+            if count >= max_activations:
+                raise ValueError("Activation limit reached")
+            con.execute("INSERT INTO license_activations(license_id,device_hash,activated_at,last_seen_at) VALUES(?,?,?,?)", (license_id, device_hash, now, now))
+            return {"activated": True, "new_activation": True, "activation_count": count + 1}
+
+    def license_activation_count(self, license_id: str) -> int:
+        with self.connect() as con:
+            return int(con.execute("SELECT COUNT(*) FROM license_activations WHERE license_id=?", (license_id,)).fetchone()[0])
 
     def save_correlations(self, incident_id: str | None, findings: list[dict[str, Any]]) -> int:
         if not findings:
