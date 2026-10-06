@@ -29,7 +29,7 @@ on:
         default: ""
         type: string
       gumroad_license:
-        description: Gumroad license key; stored only as a hash in the artifact metadata
+        description: Gumroad license key; stored only as a hash in license metadata
         required: false
         default: ""
         type: string
