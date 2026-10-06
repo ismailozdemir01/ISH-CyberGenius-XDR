@@ -31,3 +31,15 @@ def test_license_registry_is_idempotent(tmp_path):
     second = db.upsert_gumroad_license(sale, {"license_key": sale["license_key"]})
     assert first["id"] == second["id"]
     assert db.licenses() and len(db.licenses()) == 1
+
+
+def test_license_activation_is_idempotent_and_limited(tmp_path):
+    db = Database(str(tmp_path / "xdr.db"))
+    first = db.activate_license("LIC-1", "device-a", 2)
+    second = db.activate_license("LIC-1", "device-a", 2)
+    assert first["new_activation"] is True
+    assert second["new_activation"] is False
+    db.activate_license("LIC-1", "device-b", 2)
+    import pytest
+    with pytest.raises(ValueError, match="Activation limit"):
+        db.activate_license("LIC-1", "device-c", 2)
