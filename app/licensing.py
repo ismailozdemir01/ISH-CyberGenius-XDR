@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 import httpx
 
+from .license_tokens import verify_token, verify_revocation_manifest, validate_payload
+
 
 class GumroadError(RuntimeError):
     pass
@@ -45,3 +47,41 @@ class GumroadClient:
         if response.status_code >= 400:
             raise GumroadError(f"Gumroad license verification failed with HTTP {response.status_code}.")
         return response.json()
+
+
+async def dispatch_license_workflow(
+    *,
+    github_token: str,
+    repository: str,
+    workflow: str,
+    ref: str,
+    email: str,
+    plan: str,
+    order_number: str = "",
+    gumroad_license: str = "",
+    days: int = 0,
+    max_activations: int = 3,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    url = f"https://api.github.com/repos/{repository}/actions/workflows/{workflow}/dispatches"
+    payload = {
+        "ref": ref,
+        "inputs": {
+            "email": email,
+            "plan": plan or "Professional",
+            "days": str(days),
+            "max_activations": str(max_activations),
+            "order_number": order_number,
+            "gumroad_license": gumroad_license,
+        },
+    }
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {github_token}",
+        "X-GitHub-Api-Version": "2026-03-10",
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json=payload, headers=headers)
+    if response.status_code >= 300:
+        raise GumroadError(f"GitHub license workflow dispatch failed with HTTP {response.status_code}.")
+    return {"status": "dispatched", "workflow": workflow, "repository": repository, "ref": ref}
