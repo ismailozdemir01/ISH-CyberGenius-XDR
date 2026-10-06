@@ -6,3 +6,5 @@ __pycache__/
 data/*.db
 ozhex-license.lic
 ozhex-license.lic.json
+ozhex-license-private.pem
+ozhex-license-public.pem
