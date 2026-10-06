@@ -49,6 +49,28 @@ CREATE TABLE IF NOT EXISTS correlations (
 );
 CREATE INDEX IF NOT EXISTS idx_correlations_incident ON correlations(incident_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_correlations_device ON correlations(device, created_at);
+CREATE TABLE IF NOT EXISTS licenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  license_key TEXT NOT NULL UNIQUE,
+  product_permalink TEXT NOT NULL,
+  email TEXT,
+  order_number TEXT,
+  full_name TEXT,
+  plan TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  price TEXT,
+  currency TEXT,
+  variants TEXT,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  uses INTEGER NOT NULL DEFAULT 0,
+  seats INTEGER,
+  raw_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_licenses_email ON licenses(email);
+CREATE INDEX IF NOT EXISTS idx_licenses_order ON licenses(order_number);
+CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status);
 """
 
 def utcnow() -> str:
