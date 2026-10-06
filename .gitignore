@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.pyc
+data/*.db
+ozhex-license.lic
+ozhex-license.lic.json
