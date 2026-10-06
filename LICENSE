@@ -1,0 +1,91 @@
+OZHEX-CyberGenius-XDR
+PROPRIETARY SOFTWARE LICENSE
+Version 1.0 — 2026-10-06
+
+Copyright (c) 2026 OZHEX. All rights reserved.
+
+1. OWNERSHIP
+
+OZHEX-CyberGenius-XDR, including its source code, documentation, configuration,
+UI, assets, and original technical materials, is proprietary software owned by
+the copyright holder identified above ("OZHEX").
+
+2. PUBLIC REPOSITORY ACCESS
+
+The source code is publicly visible on GitHub for transparency, evaluation,
+security review, and educational inspection.
+
+Public availability does NOT grant an open-source license.
+
+Unless you have a separate written commercial license from OZHEX, you may:
+
+- view and inspect the source code;
+- download a copy for personal evaluation and security review;
+- run the software solely for non-commercial evaluation.
+
+3. RESTRICTIONS
+
+Without a separate written license from OZHEX, you may NOT:
+
+- use the software for commercial or production purposes;
+- sell, sublicense, rent, lease, or redistribute the software;
+- publish, mirror, or distribute modified or unmodified copies;
+- create or distribute derivative products based on the software;
+- remove copyright, trademark, or proprietary notices;
+- use the software to provide a commercial managed service, SaaS, MSSP,
+  consulting, or other paid service.
+
+4. GUMROAD COMMERCIAL LICENSE
+
+Commercial licenses may be purchased through the official OZHEX product
+offering, including Gumroad.
+
+A Gumroad purchase grants only the rights expressly stated in the commercial
+license supplied with that purchase. A purchase does not transfer ownership
+of the software or copyright to the purchaser.
+
+Unless the purchased commercial license explicitly states otherwise, a
+commercial license is non-exclusive, non-transferable, and limited to the
+purchaser's licensed organization and permitted internal use.
+
+5. THIRD-PARTY COMPONENTS
+
+This license applies only to original OZHEX materials. Third-party
+dependencies and services remain subject to their own licenses and terms.
+
+Microsoft services, APIs, trademarks, and related technologies are owned by
+their respective rights holders and are not transferred by this license.
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT, TO THE MAXIMUM EXTENT
+PERMITTED BY LAW.
+
+7. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, OZHEX SHALL NOT BE LIABLE FOR ANY
+INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR LOSS-OF-PROFIT
+DAMAGES ARISING FROM OR RELATED TO THE USE OF THE SOFTWARE.
+
+8. TERMINATION
+
+Any rights granted under a commercial license terminate if the licensee
+materially breaches its license terms and fails to cure the breach within
+the period specified in the applicable commercial agreement.
+
+9. GOVERNING TERMS
+
+The applicable commercial agreement controls any rights granted to a paying
+customer. In the event of a conflict between this public repository license
+and a separately executed commercial license, the commercial license
+controls for the licensed customer.
+
+10. CONTACT
+
+For commercial licensing, support, or permissions, contact the copyright
+holder through the official OZHEX sales/support channel.
+
+This license is intended to make the public GitHub repository source-visible,
+not open source. No rights are granted except those expressly stated above.
