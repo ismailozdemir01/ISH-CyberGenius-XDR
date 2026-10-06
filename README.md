@@ -225,16 +225,18 @@ Uygulama sunucusunda:
     LICENSE_PUBLIC_KEY=...
     LICENSE_REVOCATION_URL=https://raw.githubusercontent.com/ismailozdemir01/OZHEX-CyberGenius-XDR/main/licenses/revocations.ozhx
     LICENSE_DISPATCH_ENABLED=true
+    LICENSE_CALLBACK_URL=https://YOUR_DOMAIN/api/license/issue-callback
+    LICENSE_CALLBACK_SECRET=LONG_RANDOM_SECRET
 
-`GITHUB_ACTIONS_TOKEN` yalnızca workflow dispatch yetkisi olan, mümkün olan en dar kapsamlı GitHub App installation token veya fine-grained token olmalıdır. GitHub, workflow dispatch için Actions: write yetkisini destekler. citeturn0search5
+`GITHUB_ACTIONS_TOKEN` yalnızca workflow dispatch yetkisi olan, mümkün olan en dar kapsamlı GitHub App installation token veya fine-grained token olmalıdır. GitHub, workflow dispatch için Actions: write yetkisini destekler.
 
-Gumroad satışından sonra Ping endpoint'i GitHub'ın `repository_dispatch`/workflow dispatch mekanizmasıyla lisans üretim workflow'unu tetikler. `repository_dispatch` dış sistemlerden workflow çalıştırmak için desteklenir. citeturn0search1turn0search3
+Gumroad satışından sonra Ping endpoint'i GitHub'ın `repository_dispatch`/workflow dispatch mekanizmasıyla lisans üretim workflow'unu tetikler. `repository_dispatch` dış sistemlerden workflow çalıştırmak için desteklenir.
 
-Workflow, müşteri lisansını GitHub Actions artifact'i olarak üretir. Artifact'ler workflow sonrasında indirilebilir ve paylaşılabilir; public repo'da müşteri lisanslarını commit etmek yerine artifact kullanılır. citeturn0search10
+Workflow imzalı tokenı üretir ve yalnızca LICENSE_CALLBACK_URL ile LICENSE_CALLBACK_SECRET üzerinden OZHEX backend'ine güvenli şekilde teslim eder. Public repository'de müşteri lisans tokenı artifact olarak yayınlanmaz. Public repo artifactleri read erişimi olan herkes tarafından görülebileceği için müşteri tokenlarını public artifactte tutmuyoruz.
 
 ### Manuel lisans üretimi
 
-GitHub Actions → **OZHEX License Issuance → Run workflow** ile müşteri e-postası, plan, süre ve aktivasyon limiti girilebilir. Workflow tamamlandığında `ozhex-license-<run_id>` artifact'i oluşur.
+GitHub Actions → **OZHEX License Issuance → Run workflow** ile müşteri e-postası, plan, süre ve aktivasyon limiti girilebilir. Workflow tamamlandığında imzalı token backend callback üzerinden issued_licenses tablosuna alınır. Yönetici, mevcut Bearer API key ile /api/license/{license_id}/token endpointinden müşteriye verilecek tokenı alabilir.
 
 ### Aktivasyon API'si
 
@@ -261,7 +263,7 @@ Bu iki endpoint müşteri uygulamasının doğrudan kullanabilmesi için Bearer 
 
 GitHub Actions → **OZHEX License Revocation → Run workflow** üzerinden `LIC-...` lisans kimliği revoke edilir. Workflow imzalı `licenses/revocations.ozhx` manifestini günceller. Uygulama manifest imzasını doğrular ve revoke edilmiş lisansı aktivasyonda reddeder.
 
-> GitHub Actions workflow'larının kimler tarafından çalıştırılabildiği repository/organization Actions policy ile ayrıca sınırlandırılmalıdır. Özellikle public repository'de lisans üretim workflow'u için yalnızca güvenilir aktörlere izin verilmesi önerilir. citeturn0search0turn0search2
+> GitHub Actions workflow'larının kimler tarafından çalıştırılabildiği repository/organization Actions policy ile ayrıca sınırlandırılmalıdır. Özellikle public repository'de lisans üretim workflow'u için yalnızca güvenilir aktörlere izin verilmesi önerilir.
 
 ## License
 
