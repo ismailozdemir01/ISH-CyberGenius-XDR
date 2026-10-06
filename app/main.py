@@ -14,8 +14,9 @@ from .detection import detect, RULES
 from .correlation import correlate
 from .report import build_incident_report
 from .translator import TranslatorClient
+from .licensing import GumroadClient, GumroadError, gumroad_sale_fields
 
-app=FastAPI(title=settings.app_name, version="1.2.0")
+app=FastAPI(title=settings.app_name, version="1.3.0")
 db=Database(settings.database_path)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
