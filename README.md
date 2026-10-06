@@ -82,7 +82,7 @@ All `/api/*` routes require `Authorization: Bearer <API_KEY>`.
 ## Quick start
 
 ```bash
-git clone https://github.com/ismailozdemir01/ISH-CyberGenius-XDR.git
+git clone https://github.com/ismailozdemir01/OZHEX-CyberGenius-XDR.git
 cd OZHEX-CyberGenius-XDR
 python -m venv .venv
 source .venv/bin/activate
@@ -100,8 +100,6 @@ pip install -e ".[test]"
 Copy-Item .env.example .env
 python main.py
 ```
-
-> The GitHub repository slug is currently still `ISH-CyberGenius-XDR`; the application, package and documentation branding is `OZHEX-CyberGenius-XDR`. Rename the GitHub repository itself to the new slug before publishing the final public link, then use the new clone URL.
 
 Dashboard: `http://127.0.0.1:8000/`  
 Swagger: `http://127.0.0.1:8000/docs`
@@ -189,4 +187,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Run compi
 
 ## License
 
-See [LICENSE](LICENSE).
+**Proprietary / All Rights Reserved.** The public GitHub repository is source-visible for evaluation and security review; it is not open-source software. Commercial use, redistribution, resale, and production deployment require a separate OZHEX commercial license. Commercial licenses are sold through the official OZHEX product offering, including Gumroad.
+
+See [LICENSE](LICENSE) for the full terms.
