@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS license_activations (
   UNIQUE(license_id, device_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_license_activations_license ON license_activations(license_id);
+CREATE TABLE IF NOT EXISTS issued_licenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  license_id TEXT NOT NULL UNIQUE,
+  token TEXT NOT NULL,
+  email TEXT,
+  order_number TEXT,
+  created_at TEXT NOT NULL
+);
 """
 
 def utcnow() -> str:
@@ -243,6 +251,23 @@ class Database:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def save_issued_license(self, license_id: str, token: str, email: str = "", order_number: str = "") -> dict[str, Any]:
+        now = utcnow()
+        with self.connect() as con:
+            con.execute(
+                """INSERT INTO issued_licenses(license_id,token,email,order_number,created_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(license_id) DO UPDATE SET token=excluded.token,email=excluded.email,order_number=excluded.order_number""",
+                (license_id, token, email, order_number, now),
+            )
+            row = con.execute("SELECT id,license_id,email,order_number,created_at FROM issued_licenses WHERE license_id=?", (license_id,)).fetchone()
+        return dict(row)
+
+    def issued_license_token(self, license_id: str) -> str | None:
+        with self.connect() as con:
+            row = con.execute("SELECT token FROM issued_licenses WHERE license_id=?", (license_id,)).fetchone()
+        return str(row["token"]) if row else None
 
     def activate_license(self, license_id: str, device_hash: str, max_activations: int) -> dict[str, Any]:
         now = utcnow()
