@@ -98,6 +98,8 @@ async def revoked_license_ids() -> set[str]:
     try:
         async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
             response = await client.get(settings.license_revocation_url)
+            if response.status_code == 404:
+                return set()
             response.raise_for_status()
         return verify_revocation_manifest(response.text, settings.license_public_key or "")
     except Exception as exc:
