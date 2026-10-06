@@ -186,25 +186,82 @@ Live Microsoft tenant validation remains environment-dependent and requires vali
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Run compile checks and the full pytest suite before submitting changes.
 
 
-## Gumroad lisans otomasyonu
+## GitHub tabanlı ticari lisans sistemi
 
-Gumroad ürününde **License Keys** özelliğini etkinleştirdiğinizde Gumroad her satış için lisans anahtarını otomatik üretir ve müşterinin makbuzunda/ürün erişiminde gösterir. OZHEX-CyberGenius-XDR artık bu anahtarı Gumroad Ping üzerinden otomatik olarak yerel lisans kayıtlarına alabilir. Böylece müşteriye elle key üretip göndermeniz gerekmez.
+Gumroad bu mimaride yalnızca **satış ve müşteri kaynağıdır**. Lisansın kendisi GitHub Actions tarafından üretilen, Ed25519 ile imzalanmış OZHEX tokenıdır.
 
-Sunucu ortamında şu değişkenleri tanımlayın:
+Akış:
 
-    GUMROAD_API_BASE_URL=https://api.gumroad.com
-    GUMROAD_PRODUCT_PERMALINK=YOUR_GUMROAD_PRODUCT_PERMALINK
-    GUMROAD_PING_SECRET=LONG_RANDOM_SECRET
+**Gumroad Ping → GitHub Actions → imzalı `OZHX1.*` token → müşteri lisans dosyası artifact'i → `/api/license/activate` → cihaz aktivasyonu → imzalı revocation manifest kontrolü**
 
-Gumroad **Settings → Advanced → Ping** bölümünde şu endpoint'i kullanın:
+### Güvenlik modeli
 
-    https://YOUR_DOMAIN/api/gumroad/ping/LONG_RANDOM_SECRET
+- Özel Ed25519 anahtarı yalnızca GitHub Actions Secret olarak tutulur; repoya commit edilmez.
+- Uygulama yalnızca public key ile token doğrular.
+- Token içinde müşteri e-postası düz metin olarak tutulmaz; SHA-256 müşteri özeti bulunur.
+- Aktivasyon cihaz kimliğinin SHA-256 özeti üzerinden takip edilir.
+- `max_activations` ile cihaz sayısı sınırlandırılır.
+- İmzalı revocation manifest GitHub üzerinde yayınlanır ve uygulama aktivasyon sırasında doğrular.
+- Revocation manifest alınamazsa `LICENSE_FAIL_CLOSED_REVOCATION=true` ile lisans aktivasyonu fail-closed davranır.
+- Public repository'de gerçek private key veya müşteri lisans tokenları tutulmaz.
 
-Satış akışı: **Gumroad ödeme → Gumroad license key'i otomatik üretir → Gumroad Ping → OZHEX webhook → SQLite lisans kaydı → Gumroad API ile doğrulama.**
+### GitHub Actions Secret kurulumu
 
-> `GUMROAD_PING_SECRET` uzun ve rastgele olmalıdır. Gumroad Ping imzalı webhook değildir; endpoint URL'sindeki gizli değer webhook kimlik doğrulamasıdır. Gerçek ticari kullanımda HTTPS zorunludur.
+Repository Settings → Secrets and variables → Actions altında:
 
-Lisans doğrulama endpoint'i Gumroad'un lisans doğrulama API'sini kullanır; böylece iade/devre dışı bırakılmış key'ler için yalnızca yerel kayda güvenilmez.
+- `OZHEX_LICENSE_PRIVATE_KEY`: Ed25519 private key (PEM veya URL-safe base64 seed)
+- `OZHEX_LICENSE_PUBLIC_KEY`: karşılık gelen public key (PEM veya URL-safe base64)
+
+Private key'i sohbet, issue, commit veya README içine koymayın.
+
+### Otomatik Gumroad → GitHub Actions
+
+Uygulama sunucusunda:
+
+    GITHUB_ACTIONS_TOKEN=...
+    GITHUB_LICENSE_REPO=ismailozdemir01/OZHEX-CyberGenius-XDR
+    GITHUB_LICENSE_WORKFLOW=license-issue.yml
+    GITHUB_LICENSE_REF=main
+    LICENSE_PUBLIC_KEY=...
+    LICENSE_REVOCATION_URL=https://raw.githubusercontent.com/ismailozdemir01/OZHEX-CyberGenius-XDR/main/licenses/revocations.ozhx
+    LICENSE_DISPATCH_ENABLED=true
+
+`GITHUB_ACTIONS_TOKEN` yalnızca workflow dispatch yetkisi olan, mümkün olan en dar kapsamlı GitHub App installation token veya fine-grained token olmalıdır. GitHub, workflow dispatch için Actions: write yetkisini destekler. citeturn0search5
+
+Gumroad satışından sonra Ping endpoint'i GitHub'ın `repository_dispatch`/workflow dispatch mekanizmasıyla lisans üretim workflow'unu tetikler. `repository_dispatch` dış sistemlerden workflow çalıştırmak için desteklenir. citeturn0search1turn0search3
+
+Workflow, müşteri lisansını GitHub Actions artifact'i olarak üretir. Artifact'ler workflow sonrasında indirilebilir ve paylaşılabilir; public repo'da müşteri lisanslarını commit etmek yerine artifact kullanılır. citeturn0search10
+
+### Manuel lisans üretimi
+
+GitHub Actions → **OZHEX License Issuance → Run workflow** ile müşteri e-postası, plan, süre ve aktivasyon limiti girilebilir. Workflow tamamlandığında `ozhex-license-<run_id>` artifact'i oluşur.
+
+### Aktivasyon API'si
+
+Müşteri uygulaması lisans tokenını bir cihaz kimliğiyle gönderir:
+
+    POST /api/license/activate
+    {
+      "token": "OZHX1....",
+      "device_id": "stable-local-installation-id"
+    }
+
+Aynı cihaz tekrar aktive edildiğinde yeni slot tüketilmez. Limit dolduğunda API `409 Activation limit reached` döndürür.
+
+Token kontrolü için:
+
+    POST /api/license/verify-token
+    {
+      "token": "OZHX1...."
+    }
+
+Bu iki endpoint müşteri uygulamasının doğrudan kullanabilmesi için Bearer API key gerektirmez; tokenın kendisi kriptografik kimliktir. Microsoft/XDR yönetim API'leri ise mevcut Bearer API key korumasını korur.
+
+### Revocation
+
+GitHub Actions → **OZHEX License Revocation → Run workflow** üzerinden `LIC-...` lisans kimliği revoke edilir. Workflow imzalı `licenses/revocations.ozhx` manifestini günceller. Uygulama manifest imzasını doğrular ve revoke edilmiş lisansı aktivasyonda reddeder.
+
+> GitHub Actions workflow'larının kimler tarafından çalıştırılabildiği repository/organization Actions policy ile ayrıca sınırlandırılmalıdır. Özellikle public repository'de lisans üretim workflow'u için yalnızca güvenilir aktörlere izin verilmesi önerilir. citeturn0search0turn0search2
 
 ## License
 
