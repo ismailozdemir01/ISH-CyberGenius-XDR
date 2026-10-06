@@ -1,0 +1,43 @@
+name: OZHEX License Revocation
+
+on:
+  workflow_dispatch:
+    inputs:
+      license_id:
+        description: License ID to revoke (for example LIC-ABC123...)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  revoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install -e .
+
+      - name: Update signed revocation manifest
+        env:
+          OZHEX_LICENSE_PRIVATE_KEY: ${{ secrets.OZHEX_LICENSE_PRIVATE_KEY }}
+          OZHEX_LICENSE_PUBLIC_KEY: ${{ secrets.OZHEX_LICENSE_PUBLIC_KEY }}
+        run: |
+          test -n "$OZHEX_LICENSE_PRIVATE_KEY"
+          test -n "$OZHEX_LICENSE_PUBLIC_KEY"
+          python scripts/revoke_license.py --license-id "${{ inputs.license_id }}"
+
+      - name: Commit revocation manifest
+        run: |
+          git config user.name "OZHEX License Authority"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add licenses/revocations.ozhx
+          git diff --cached --quiet && exit 0
+          git commit -m "Revoke license ${{ inputs.license_id }}"
+          git push
