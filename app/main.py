@@ -22,7 +22,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    if request.url.path.startswith("/api/"):
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/gumroad/ping/"):
         if not settings.api_key:
             return PlainTextResponse("API authentication is not configured.", status_code=503)
         auth=request.headers.get("Authorization","")
@@ -128,6 +128,56 @@ async def translate(req:TranslationRequest):
     detection=await translator().detect(req.text)
     result=await translator().translate(req.text,req.target_language,req.source_language or detection.get("language"))
     return {"source_language":req.source_language or detection.get("language"),"detection":detection,"translation":result}
+
+
+@app.post("/api/gumroad/ping/{ping_secret}")
+async def gumroad_ping(ping_secret: str, request: Request):
+    if not settings.gumroad_ping_secret or not compare_digest(ping_secret, settings.gumroad_ping_secret):
+        raise HTTPException(404, "Not found")
+    raw = await request.body()
+    payload: dict[str, Any] = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            parsed = await request.json()
+            if isinstance(parsed, dict):
+                payload = parsed
+        except Exception:
+            payload = {}
+    else:
+        from urllib.parse import parse_qs
+        payload = {k: v[-1] for k, v in parse_qs(raw.decode("utf-8"), keep_blank_values=True).items()}
+    sale = gumroad_sale_fields(payload)
+    if not sale["license_key"]:
+        raise HTTPException(422, "Gumroad license key is missing. Enable license keys for the Gumroad product.")
+    if settings.gumroad_product_permalink and sale["product_permalink"] != settings.gumroad_product_permalink:
+        return {"status": "ignored", "reason": "product_not_configured"}
+    license_row = db.upsert_gumroad_license(sale, payload)
+    return {"status": "ok", "license": license_row}
+
+
+@app.post("/api/license/verify")
+async def verify_license(request: Request):
+    body = await request.json()
+    license_key = str(body.get("license_key") or "").strip()
+    if not license_key:
+        raise HTTPException(400, "license_key is required")
+    if not settings.gumroad_product_permalink:
+        raise HTTPException(503, "GUMROAD_PRODUCT_PERMALINK is not configured.")
+    try:
+        result = await GumroadClient(
+            settings.gumroad_api_base_url,
+            settings.gumroad_product_permalink,
+            settings.request_timeout,
+        ).verify(license_key)
+    except GumroadError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return result
+
+
+@app.get("/api/licenses")
+def licenses(limit: int = 100):
+    return {"value": db.licenses(min(max(limit, 1), 500))}
 
 @app.post("/api/hunting")
 async def hunting(req:HuntingRequest):
