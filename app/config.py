@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     gumroad_api_base_url: str = "https://api.gumroad.com"
     gumroad_product_permalink: str | None = None
     gumroad_ping_secret: str | None = None
+    license_product: str = "OZHEX-CyberGenius-XDR"
+    license_public_key: str | None = None
+    license_revocation_url: str | None = None
+    github_actions_token: str | None = None
+    github_license_repo: str = "ismailozdemir01/OZHEX-CyberGenius-XDR"
+    github_license_workflow: str = "license-issue.yml"
+    github_license_ref: str = "main"
+    license_dispatch_enabled: bool = True
+    license_dispatch_timeout: float = 15.0
+    license_fail_closed_revocation: bool = True
 
     @property
     def graph_configured(self) -> bool:
